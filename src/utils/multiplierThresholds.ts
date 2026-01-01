@@ -1,80 +1,139 @@
 /**
- * Multiplier Thresholds Configuration
+ * CSS Strategy v4.2 Configuration
  * 
- * Based on the Five-Dimensional Dynamic Adjustment System specification:
- * Final Investment Amount = Base Amount × BB_Multiplier × VIX_Multiplier × RSI_Multiplier
+ * Composite Signal Score (CSS) system with 5 weighted indicators:
+ * CSS = (VIX × 0.20) + (RSI × 0.25) + (BB × 0.15) + (MA50 × 0.20) + (F&G × 0.20)
  */
 
 /**
- * VIX (Market Fear) Adjustment Thresholds
- * Higher VIX = More fear = Better buying opportunity
+ * Base Allocation Percentages per Asset (v4.2)
+ * Total: 100%
  * 
- * Strategy: "Buy when others are fearful"
- */
-export const VIX_THRESHOLDS = {
-  EXTREME_LOW: { max: 15, multiplier: 1.0 },      // Extreme confidence
-  NORMAL: { min: 15, max: 20, multiplier: 1.0 },  // Normal market
-  MODERATE_FEAR: { min: 20, max: 30, multiplier: 1.3 },  // Moderate fear, 30% increase
-  SIGNIFICANT_FEAR: { min: 30, max: 40, multiplier: 1.8 },  // Significant fear, 80% increase
-  SEVERE_FEAR: { min: 40, max: 50, multiplier: 2.3 },  // Severe fear, 130% increase
-  EXTREME_CRISIS: { min: 50, multiplier: 3.0 }  // Extreme crisis, cautious doubling
-} as const;
-
-/**
- * RSI (Momentum) Adjustment Thresholds
- * Lower RSI = Oversold = Better buying opportunity
- * Higher RSI = Overbought = Pause investment
- */
-export const RSI_THRESHOLDS = {
-  OVERSOLD: { max: 30, multiplier: 1.5 },      // Premium buying opportunity
-  NORMAL: { min: 30, max: 70, multiplier: 1.0 },  // Standard allocation
-  OVERBOUGHT: { min: 70, multiplier: 0.0 }     // Pause/reduce (0x = skip)
-} as const;
-
-/**
- * Bollinger Bands Width Adjustment Thresholds
- * BB Width = (Upper - Lower) / Middle × 100%
- * Higher width = More volatility = More opportunities
- */
-export const BB_WIDTH_THRESHOLDS = {
-  LOW: { max: 5, multiplier: 1.0 },          // Stable market, normal allocation
-  MODERATE: { min: 5, max: 10, multiplier: 1.15 },  // Moderate opportunities
-  HIGH: { min: 10, multiplier: 1.35 }        // High volatility, more opportunities
-} as const;
-
-/**
- * Base Allocation Percentages per Asset
- * Total must equal 100%
- * Note: XLV and XLP share the 15% defensive allocation - only one is selected per week
+ * Growth: 65% (QQQ + GOOG + AIQ + TSLA)
+ * International: 10% (VXUS)
+ * Defensive: 10% (XLV)
+ * Hedge: 15% (TLT)
  */
 export const BASE_ALLOCATIONS: Record<string, number> = {
-  'QQQ': 25,   // Tech ETF
-  'GOOG': 25,  // Google
-  'TSLA': 20,  // Tesla
-  'AIQ': 15,   // AI ETF
-  'XLV': 15,   // Defensive option 1 (Healthcare ETF)
-  'XLP': 15    // Defensive option 2 (Consumer Staples ETF)
+  'QQQ': 25,      // Tech ETF - Core tech/growth exposure
+  'GOOG': 17.5,   // Stock - AI & cloud leader
+  'AIQ': 15,      // Thematic ETF - AI & robotics theme
+  'TSLA': 7.5,    // Stock - High-growth, high-volatility
+  'XLV': 10,      // Defensive - Healthcare (recession-resistant)
+  'VXUS': 10,     // International - Non-US diversification
+  'TLT': 15       // Hedge - Treasury bonds (flight-to-safety)
 } as const;
 
 /**
- * Defensive allocation percentage
- */
-export const DEFENSIVE_ALLOCATION_PERCENTAGE = 15;
-
-/**
- * Asset Categories for Rotation
+ * Asset Categories
  */
 export const ASSET_CATEGORIES = {
-  AGGRESSIVE: ['QQQ', 'GOOG', 'TSLA', 'AIQ'],
-  DEFENSIVE: ['XLV', 'XLP']  // Healthcare or Consumer Staples - choose one based on indicators
+  GROWTH: ['QQQ', 'GOOG', 'AIQ', 'TSLA'],
+  INTERNATIONAL: ['VXUS'],
+  DEFENSIVE: ['XLV'],
+  HEDGE: ['TLT']
 } as const;
 
 /**
- * Defensive Rotation Thresholds
- * When to increase defensive allocation
+ * Budget Constraints (v4.2)
  */
-export const DEFENSIVE_ROTATION = {
-  VIX_THRESHOLD: 30,           // VIX > 30 triggers defensive rotation
-  AVG_RSI_THRESHOLD: 75,       // Average RSI > 75 triggers defensive rotation
-  DEFENSIVE_INCREASE: 1.5      // 50% increase to defensive assets
+export const BUDGET_CONSTRAINTS = {
+  MIN_MULTIPLIER: 0.5,    // Never invest less than 50% of base
+  MAX_MULTIPLIER: 1.2,    // Never invest more than 120% of base
+  BASE_BUDGET: 250,       // Base weekly budget
+  MIN_BUDGET: 125,        // $250 × 0.5
+  MAX_BUDGET: 300         // $250 × 1.2
 } as const;
+
+/**
+ * CSS Indicator Weights (v4.2)
+ * Total: 100%
+ */
+export const CSS_WEIGHTS = {
+  VIX: 0.20,           // Market-wide fear indicator
+  RSI: 0.25,           // Per-asset momentum
+  BB_WIDTH: 0.15,      // Per-asset volatility
+  MA50: 0.20,          // Per-asset trend/discount
+  FEAR_GREED: 0.20     // Market-wide sentiment
+} as const;
+
+/**
+ * CSS to Multiplier Mapping (v4.2)
+ * Higher CSS = More fear/opportunity = Higher multiplier
+ */
+export const CSS_TO_MULTIPLIER: Array<{ maxCSS: number; multiplier: number }> = [
+  { maxCSS: 20, multiplier: 0.5 },   // Extreme Greed - min buy
+  { maxCSS: 35, multiplier: 0.6 },   // Greed
+  { maxCSS: 50, multiplier: 0.8 },   // Slightly Greedy
+  { maxCSS: 60, multiplier: 1.0 },   // Neutral
+  { maxCSS: 75, multiplier: 1.2 },   // Fear - opportunity
+  { maxCSS: 100, multiplier: 1.2 }   // Extreme Fear - capped at max
+];
+
+/**
+ * VIX Score Thresholds (0-100 scale)
+ * Higher VIX = Higher score
+ */
+export const VIX_SCORE_THRESHOLDS: Array<{ maxVIX: number; score: number }> = [
+  { maxVIX: 15, score: 20 },    // Complacent
+  { maxVIX: 20, score: 40 },    // Normal
+  { maxVIX: 25, score: 60 },    // Elevated anxiety
+  { maxVIX: 30, score: 75 },    // Fearful
+  { maxVIX: 40, score: 90 },    // Very fearful
+  { maxVIX: Infinity, score: 100 }  // Panic
+];
+
+/**
+ * RSI Score Thresholds (0-100 scale)
+ * Lower RSI = Higher score (oversold = opportunity)
+ */
+export const RSI_SCORE_THRESHOLDS: Array<{ maxRSI: number; score: number }> = [
+  { maxRSI: 30, score: 100 },   // Oversold (great buy)
+  { maxRSI: 40, score: 80 },    // Getting oversold
+  { maxRSI: 50, score: 60 },    // Slightly bearish
+  { maxRSI: 60, score: 40 },    // Slightly bullish
+  { maxRSI: 70, score: 20 },    // Getting overbought
+  { maxRSI: Infinity, score: 0 } // Overbought
+];
+
+/**
+ * BB Width Score Thresholds (0-100 scale)
+ * Higher volatility = Higher score (more opportunity)
+ */
+export const BB_WIDTH_SCORE_THRESHOLDS: Array<{ maxWidth: number; score: number }> = [
+  { maxWidth: 5, score: 30 },     // Low volatility
+  { maxWidth: 10, score: 50 },    // Moderate volatility
+  { maxWidth: 15, score: 70 },    // High volatility
+  { maxWidth: Infinity, score: 90 } // Very high volatility
+];
+
+/**
+ * MA50 Score Thresholds (0-100 scale)
+ * Based on price vs MA50 percentage deviation
+ * Below MA50 = Discount = Higher score
+ */
+export const MA50_SCORE_THRESHOLDS: Array<{ maxDeviation: number; score: number }> = [
+  { maxDeviation: -10, score: 90 },   // Big discount (price 10%+ below MA50)
+  { maxDeviation: -5, score: 70 },    // Discount
+  { maxDeviation: 5, score: 50 },     // Fair value
+  { maxDeviation: 10, score: 30 },    // Slightly expensive
+  { maxDeviation: Infinity, score: 10 } // Expensive
+];
+
+/**
+ * Fear & Greed Index Score Thresholds (0-100 scale)
+ * CNN F&G is 0-100 where low = fear, high = greed
+ * We invert it: More fear = Higher score
+ */
+export const FEAR_GREED_SCORE_THRESHOLDS: Array<{ maxFG: number; score: number }> = [
+  { maxFG: 25, score: 100 },    // Extreme Fear
+  { maxFG: 45, score: 75 },     // Fear
+  { maxFG: 55, score: 50 },     // Neutral
+  { maxFG: 75, score: 25 },     // Greed
+  { maxFG: 100, score: 0 }      // Extreme Greed
+];
+
+/**
+ * History days needed for calculations
+ */
+export const HISTORY_DAYS = 100; // Enough for MA50 calculation (~70 trading days)

@@ -16,7 +16,7 @@ npm run dev
 
 📋 Configuration:
    Investment Amount: $1000
-   Stocks: AAPL, MSFT, GOOGL, AMZN, SPY
+   Stocks: QQQ, GOOG, AIQ, TSLA, XLV, VXUS, TLT
    Risk Tolerance: moderate
    Email: investor@example.com
 ======================================================================

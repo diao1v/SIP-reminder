@@ -15,17 +15,47 @@ export interface TechnicalIndicators {
     middle: number;
     lower: number;
   };
-  bbWidth?: number;  // Bollinger Bands Width percentage
+  bbWidth: number;      // Bollinger Bands Width percentage
   atr: number;
-  ma20?: number;     // 20-day Moving Average
+  ma20: number;         // 20-day Moving Average
+  ma50: number;         // 50-day Moving Average (for CSS)
+}
+
+/**
+ * CSS (Composite Signal Score) Breakdown
+ * Shows individual indicator scores and final CSS
+ */
+export interface CSSBreakdown {
+  // Individual indicator scores (0-100)
+  vixScore: number;
+  rsiScore: number;
+  bbWidthScore: number;
+  ma50Score: number;
+  fearGreedScore: number | null;  // null if fetching failed
+  
+  // Raw indicator values for reference
+  vixValue: number;
+  rsiValue: number;
+  bbWidthValue: number;
+  ma50DeviationPercent: number;   // Price vs MA50 deviation %
+  fearGreedValue: number | null;
+  
+  // Calculated values
+  totalCSS: number;               // Weighted sum (0-100)
+  multiplier: number;             // CSS mapped to 0.5-1.2
+  
+  // Status flags
+  fearGreedFailed: boolean;       // True if CNN scraping failed
+  vixWeightAdjusted: boolean;     // True if VIX weight was doubled due to F&G failure
 }
 
 export interface StockAnalysis {
   symbol: string;
   marketData: MarketData;
   technicalIndicators: TechnicalIndicators;
-  signal: 'BUY' | 'SELL' | 'HOLD';
-  strength: number; // 0-100
+  cssBreakdown: CSSBreakdown;     // CSS scoring for this asset
+  signal: 'BUY' | 'HOLD';         // No SELL - we never fully stop
+  strength: number;               // 0-100
 }
 
 export interface PortfolioAllocation {
@@ -33,20 +63,30 @@ export interface PortfolioAllocation {
   amount: number;
   percentage: number;
   reasoning: string;
-  baseAmount?: number;        // Base allocation before adjustments
-  multiplier?: number;        // Combined multiplier applied
-  rsiRecommendation?: string; // RSI-based recommendation label
+  baseAmount: number;             // Base allocation before CSS adjustment
+  cssScore: number;               // Asset's CSS score
+  multiplier: number;             // CSS-derived multiplier
 }
 
 export interface AllocationReport {
   date: Date;
-  totalAmount: number;
+  totalAmount: number;            // Actual total after CSS adjustment
+  baseBudget: number;             // Base weekly budget ($250)
+  minBudget: number;              // Minimum allowed ($125)
+  maxBudget: number;              // Maximum allowed ($300)
+  
+  // Market-wide indicators
   vix: number;
-  vixMultiplier?: number;     // VIX adjustment multiplier
+  fearGreedIndex: number | null;
+  fearGreedFailed: boolean;
+  
+  // Overall CSS (market-wide component)
+  marketCSS: number;
+  
   marketCondition: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
   allocations: PortfolioAllocation[];
   recommendations: string[];
-  technicalData?: TechnicalDataRow[];  // Detailed technical reference
+  technicalData?: TechnicalDataRow[];
 }
 
 export interface TechnicalDataRow {
@@ -54,10 +94,12 @@ export interface TechnicalDataRow {
   price: number;
   rsi: number;
   ma20: number;
+  ma50: number;
   atr: number;
   bbWidth: number;
-  entryPoint: number;
-  isGoodEntry: boolean;
+  ma50Deviation: number;          // Price vs MA50 deviation %
+  cssScore: number;               // Asset's CSS score
+  multiplier: number;             // CSS-derived multiplier
 }
 
 export interface Config {
@@ -67,12 +109,14 @@ export interface Config {
     user: string;
     pass: string;
   };
-  emailTo: string[];  // Support multiple recipients
+  emailTo: string[];
   weeklyInvestmentAmount: number;
   defaultStocks: string[];
   riskTolerance: 'conservative' | 'moderate' | 'aggressive';
   port: number;
   cronSchedule: string;
+  minBudget: number;              // Minimum weekly budget ($125)
+  maxBudget: number;              // Maximum weekly budget ($300)
 }
 
 /**
@@ -81,5 +125,15 @@ export interface Config {
 export interface AssetAllocationConfig {
   symbol: string;
   basePercentage: number;
-  category: 'aggressive' | 'defensive';
+  category: 'growth' | 'international' | 'defensive' | 'hedge';
+}
+
+/**
+ * Fear & Greed API response
+ */
+export interface FearGreedResponse {
+  value: number;        // 0-100
+  rating: string;       // "Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed"
+  timestamp: Date;
+  success: boolean;
 }

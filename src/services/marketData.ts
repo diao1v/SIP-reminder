@@ -1,5 +1,6 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { MarketData } from '../types';
+import { HISTORY_DAYS } from '../utils/multiplierThresholds';
 
 interface YahooChartResponse {
   chart: {
@@ -91,8 +92,9 @@ export class MarketDataService {
 
   /**
    * Fetches historical price data for technical analysis
+   * Default 100 days for MA50 calculation (CSS v4.2)
    */
-  async fetchHistoricalData(symbol: string, days: number = 30): Promise<number[]> {
+  async fetchHistoricalData(symbol: string, days: number = HISTORY_DAYS): Promise<number[]> {
     try {
       const data = await this.fetchFromYahoo<YahooChartResponse>(symbol, {
         interval: '1d',

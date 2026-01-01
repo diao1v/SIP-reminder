@@ -1,87 +1,100 @@
 import { MarketDataService } from './marketData';
 import { TechnicalAnalysisService } from './technicalAnalysis';
-import { AdjustmentMultiplierService } from './adjustmentMultipliers';
+import { CSSService } from './cssScoring';
+import { FearGreedService } from './fearGreedIndex';
 import { 
   StockAnalysis, 
   PortfolioAllocation, 
   AllocationReport, 
   Config,
-  TechnicalDataRow 
+  TechnicalDataRow,
+  FearGreedResponse
 } from '../types';
-import { 
-  BASE_ALLOCATIONS, 
-  ASSET_CATEGORIES, 
-  DEFENSIVE_ALLOCATION_PERCENTAGE 
-} from '../utils/multiplierThresholds';
+import { BASE_ALLOCATIONS, BUDGET_CONSTRAINTS } from '../utils/multiplierThresholds';
 
+/**
+ * Portfolio Allocation Engine (CSS v4.2)
+ * 
+ * Uses Composite Signal Score (CSS) to adjust investment amounts:
+ * - Never fully stops investing (min 0.5x = $125)
+ * - Maximum investment capped at 1.2x ($300)
+ * - 5 weighted indicators: VIX, RSI, BB Width, MA50, Fear & Greed
+ */
 export class PortfolioAllocationEngine {
   private marketDataService: MarketDataService;
   private technicalAnalysisService: TechnicalAnalysisService;
-  private adjustmentMultiplierService: AdjustmentMultiplierService;
+  private cssService: CSSService;
+  private fearGreedService: FearGreedService;
 
   constructor(
     marketDataService?: MarketDataService,
     technicalAnalysisService?: TechnicalAnalysisService,
-    adjustmentMultiplierService?: AdjustmentMultiplierService
+    cssService?: CSSService,
+    fearGreedService?: FearGreedService
   ) {
     this.marketDataService = marketDataService ?? new MarketDataService();
     this.technicalAnalysisService = technicalAnalysisService ?? new TechnicalAnalysisService();
-    this.adjustmentMultiplierService = adjustmentMultiplierService ?? new AdjustmentMultiplierService();
+    this.cssService = cssService ?? new CSSService();
+    this.fearGreedService = fearGreedService ?? new FearGreedService();
   }
 
   /**
    * Main method to generate portfolio allocation recommendations
    */
   async generateAllocation(config: Config): Promise<AllocationReport> {
-    console.log('🔍 Fetching market data and analyzing...');
+    console.log('🔍 Fetching market data and analyzing (CSS v4.2)...');
 
-    // Fetch VIX for overall market sentiment
+    // Fetch market-wide indicators
     const vix = await this.marketDataService.fetchVIX();
-    const vixMultiplier = this.adjustmentMultiplierService.calculateVIXMultiplier(vix);
+    const fearGreedResponse = await this.fearGreedService.fetchFearGreedIndex();
+    const fearGreedIndex = fearGreedResponse.success ? fearGreedResponse.value : null;
+
+    // Calculate market-wide CSS component
+    const marketCSS = this.cssService.calculateMarketCSS(vix, fearGreedIndex);
     const marketCondition = this.determineMarketCondition(vix);
 
-    console.log(`📊 VIX: ${vix.toFixed(2)} (${vixMultiplier}x) - Market: ${marketCondition}`);
-
-    // Get stocks to analyze (excluding defensive duplicates)
-    const stocksToAnalyze = this.getStocksToAnalyze(config.defaultStocks);
+    console.log(`📊 VIX: ${vix.toFixed(2)} | F&G: ${fearGreedIndex ?? 'FAILED'} | Market CSS: ${marketCSS.toFixed(1)}`);
     
-    // Analyze each stock
-    const analyses = await this.analyzeStocks(stocksToAnalyze);
-
-    // Select the best defensive asset if both XLV and XLP are in the list
-    const selectedDefensive = await this.selectDefensiveAsset(config.defaultStocks, analyses);
-    if (selectedDefensive) {
-      console.log(`🛡️ Selected defensive asset: ${selectedDefensive.symbol} (Score: ${selectedDefensive.score.toFixed(1)})`);
+    if (!fearGreedResponse.success) {
+      console.warn('⚠️  Fear & Greed fetch failed - VIX weight doubled to 40%');
     }
 
-    // Filter analyses to only include selected assets
-    const filteredAnalyses = this.filterAnalysesForAllocation(analyses, selectedDefensive?.symbol);
+    // Analyze each stock
+    const analyses = await this.analyzeStocks(config.defaultStocks, vix, fearGreedIndex);
 
-    // Calculate allocations using multi-dimensional adjustment
+    // Calculate allocations using CSS
     const allocations = this.calculateAllocations(
-      filteredAnalyses,
+      analyses,
       config.weeklyInvestmentAmount,
-      vix,
-      selectedDefensive?.symbol
+      config.minBudget,
+      config.maxBudget
     );
 
-    // Generate technical data for report (include all analyzed stocks for reference)
+    // Generate technical data for report
     const technicalData = this.generateTechnicalData(analyses);
 
     // Generate recommendations
     const recommendations = this.generateRecommendations(
-      filteredAnalyses,
+      analyses,
       vix,
+      fearGreedIndex,
       marketCondition,
-      config.riskTolerance,
-      selectedDefensive
+      fearGreedResponse
     );
+
+    // Calculate actual total after CSS adjustments
+    const totalAmount = allocations.reduce((sum, a) => sum + a.amount, 0);
 
     return {
       date: new Date(),
-      totalAmount: config.weeklyInvestmentAmount,
+      totalAmount,
+      baseBudget: config.weeklyInvestmentAmount,
+      minBudget: config.minBudget,
+      maxBudget: config.maxBudget,
       vix,
-      vixMultiplier,
+      fearGreedIndex,
+      fearGreedFailed: !fearGreedResponse.success,
+      marketCSS,
       marketCondition,
       allocations,
       recommendations,
@@ -90,158 +103,20 @@ export class PortfolioAllocationEngine {
   }
 
   /**
-   * Get the list of stocks to analyze, ensuring both defensive options are analyzed
+   * Analyze multiple stocks with CSS scoring
    */
-  private getStocksToAnalyze(configuredStocks: string[]): string[] {
-    const stocks = new Set(configuredStocks);
-    
-    // Ensure both defensive options are analyzed for comparison
-    if (stocks.has('XLV') || stocks.has('XLP')) {
-      stocks.add('XLV');
-      stocks.add('XLP');
-    }
-    
-    return Array.from(stocks);
-  }
-
-  /**
-   * Filter analyses to only include assets that should be allocated
-   * (excludes the non-selected defensive asset)
-   */
-  private filterAnalysesForAllocation(
-    analyses: StockAnalysis[],
-    selectedDefensive: string | undefined
-  ): StockAnalysis[] {
-    return analyses.filter(a => {
-      // If this is a defensive asset and not the selected one, exclude it
-      if (ASSET_CATEGORIES.DEFENSIVE.includes(a.symbol as 'XLV' | 'XLP')) {
-        return a.symbol === selectedDefensive;
-      }
-      return true;
-    });
-  }
-
-  /**
-   * Select the best defensive asset between XLV and XLP based on technical indicators
-   * Uses a scoring system:
-   * - Lower RSI = better (40 points max)
-   * - Below entry point = better (30 points max)
-   * - Higher BB Width = more opportunity (20 points max)
-   * - Better momentum (10 points max)
-   */
-  private async selectDefensiveAsset(
-    configuredStocks: string[],
-    analyses: StockAnalysis[]
-  ): Promise<{ symbol: string; score: number; reason: string } | null> {
-    const hasXLV = configuredStocks.includes('XLV');
-    const hasXLP = configuredStocks.includes('XLP');
-
-    // If only one defensive asset is configured, use it
-    if (hasXLV && !hasXLP) {
-      return { symbol: 'XLV', score: 100, reason: 'Only XLV configured' };
-    }
-    if (hasXLP && !hasXLV) {
-      return { symbol: 'XLP', score: 100, reason: 'Only XLP configured' };
-    }
-    if (!hasXLV && !hasXLP) {
-      return null; // No defensive assets
-    }
-
-    // Both are configured, compare them
-    const xlvAnalysis = analyses.find(a => a.symbol === 'XLV');
-    const xlpAnalysis = analyses.find(a => a.symbol === 'XLP');
-
-    if (!xlvAnalysis || !xlpAnalysis) {
-      // If we couldn't analyze one, use the other
-      return xlvAnalysis 
-        ? { symbol: 'XLV', score: 100, reason: 'XLP analysis unavailable' }
-        : xlpAnalysis 
-        ? { symbol: 'XLP', score: 100, reason: 'XLV analysis unavailable' }
-        : null;
-    }
-
-    const xlvScore = this.scoreDefensiveAsset(xlvAnalysis);
-    const xlpScore = this.scoreDefensiveAsset(xlpAnalysis);
-
-    console.log(`   XLV Score: ${xlvScore.total.toFixed(1)} (RSI: ${xlvAnalysis.technicalIndicators.rsi.toFixed(1)})`);
-    console.log(`   XLP Score: ${xlpScore.total.toFixed(1)} (RSI: ${xlpAnalysis.technicalIndicators.rsi.toFixed(1)})`);
-
-    if (xlvScore.total >= xlpScore.total) {
-      return { 
-        symbol: 'XLV', 
-        score: xlvScore.total, 
-        reason: xlvScore.reasons.join('; ')
-      };
-    } else {
-      return { 
-        symbol: 'XLP', 
-        score: xlpScore.total, 
-        reason: xlpScore.reasons.join('; ')
-      };
-    }
-  }
-
-  /**
-   * Score a defensive asset based on technical indicators
-   */
-  private scoreDefensiveAsset(analysis: StockAnalysis): { total: number; reasons: string[] } {
-    let score = 0;
-    const reasons: string[] = [];
-    const { rsi, ma20, atr, bbWidth, bollingerBands } = analysis.technicalIndicators;
-    const price = analysis.marketData.price;
-
-    // RSI Score (0-40 points) - Lower RSI is better
-    // RSI 30 or below = 40 points, RSI 70+ = 0 points
-    const rsiScore = Math.max(0, Math.min(40, (70 - rsi) * (40 / 40)));
-    score += rsiScore;
-    if (rsi < 40) {
-      reasons.push(`Low RSI (${rsi.toFixed(0)})`);
-    }
-
-    // Entry Point Score (0-30 points) - Below MA20-0.5*ATR is better
-    const calculatedMa20 = ma20 ?? bollingerBands.middle;
-    const entryThreshold = calculatedMa20 - 0.5 * atr;
-    const entryDiff = entryThreshold - price;
-    if (entryDiff > 0) {
-      // Below entry point - good
-      const entryScore = Math.min(30, entryDiff / atr * 15);
-      score += entryScore;
-      reasons.push(`Below entry ($${price.toFixed(2)} < $${entryThreshold.toFixed(2)})`);
-    }
-
-    // BB Width Score (0-20 points) - Higher width = more opportunity
-    const calculatedBbWidth = bbWidth ?? ((bollingerBands.upper - bollingerBands.lower) / bollingerBands.middle * 100);
-    const bbScore = Math.min(20, calculatedBbWidth * 2);
-    score += bbScore;
-    if (calculatedBbWidth > 5) {
-      reasons.push(`Good volatility (BB: ${calculatedBbWidth.toFixed(1)}%)`);
-    }
-
-    // Momentum Score (0-10 points) - Positive change is bonus, but not primary
-    const changePercent = analysis.marketData.changePercent;
-    if (changePercent > 0) {
-      const momentumScore = Math.min(10, changePercent * 2);
-      score += momentumScore;
-    }
-
-    if (reasons.length === 0) {
-      reasons.push('Standard conditions');
-    }
-
-    return { total: score, reasons };
-  }
-
-  /**
-   * Analyze multiple stocks
-   */
-  private async analyzeStocks(symbols: string[]): Promise<StockAnalysis[]> {
+  private async analyzeStocks(
+    symbols: string[],
+    vix: number,
+    fearGreedIndex: number | null
+  ): Promise<StockAnalysis[]> {
     const analyses: StockAnalysis[] = [];
     
     for (const symbol of symbols) {
       try {
-        const analysis = await this.analyzeStock(symbol);
+        const analysis = await this.analyzeStock(symbol, vix, fearGreedIndex);
         analyses.push(analysis);
-        console.log(`✓ Analyzed ${symbol}: ${analysis.signal} (RSI: ${analysis.technicalIndicators.rsi.toFixed(1)}, strength: ${analysis.strength})`);
+        console.log(`✓ ${symbol}: CSS=${analysis.cssBreakdown.totalCSS.toFixed(1)} (${analysis.cssBreakdown.multiplier}x) RSI=${analysis.technicalIndicators.rsi.toFixed(1)}`);
       } catch (error) {
         console.error(`✗ Failed to analyze ${symbol}:`, error);
       }
@@ -251,12 +126,25 @@ export class PortfolioAllocationEngine {
   }
 
   /**
-   * Analyze a single stock with technical indicators
+   * Analyze a single stock with technical indicators and CSS
    */
-  private async analyzeStock(symbol: string): Promise<StockAnalysis> {
+  private async analyzeStock(
+    symbol: string,
+    vix: number,
+    fearGreedIndex: number | null
+  ): Promise<StockAnalysis> {
     const marketData = await this.marketDataService.fetchStockData(symbol);
-    const historicalPrices = await this.marketDataService.fetchHistoricalData(symbol, 30);
+    const historicalPrices = await this.marketDataService.fetchHistoricalData(symbol);
     const technicalIndicators = this.technicalAnalysisService.calculateIndicators(historicalPrices);
+    
+    // Calculate CSS breakdown for this asset
+    const cssBreakdown = this.cssService.calculateCSSBreakdown(
+      vix,
+      fearGreedIndex,
+      technicalIndicators,
+      marketData.price
+    );
+    
     const { signal, strength } = this.technicalAnalysisService.analyzeSignal(
       technicalIndicators,
       marketData.price
@@ -266,6 +154,7 @@ export class PortfolioAllocationEngine {
       symbol,
       marketData,
       technicalIndicators,
+      cssBreakdown,
       signal,
       strength
     };
@@ -281,37 +170,24 @@ export class PortfolioAllocationEngine {
   }
 
   /**
-   * Calculate portfolio allocations using multi-dimensional adjustment system
-   * Final Investment Amount = Base Amount × BB_Multiplier × VIX_Multiplier × RSI_Multiplier
+   * Calculate portfolio allocations using CSS multipliers
    */
   private calculateAllocations(
     analyses: StockAnalysis[],
-    totalAmount: number,
-    vix: number,
-    selectedDefensive: string | undefined
+    baseBudget: number,
+    minBudget: number,
+    maxBudget: number
   ): PortfolioAllocation[] {
-    // Check for defensive rotation
-    const avgRsi = this.calculateAverageRSI(analyses);
-    const shouldRotateDefensive = this.adjustmentMultiplierService.shouldTriggerDefensiveRotation(vix, avgRsi);
-
-    if (shouldRotateDefensive) {
-      console.log(`🛡️ Defensive rotation triggered (VIX: ${vix}, Avg RSI: ${avgRsi.toFixed(1)})`);
-    }
-
     const allocations: PortfolioAllocation[] = [];
 
     for (const analysis of analyses) {
       const allocation = this.calculateSingleAllocation(
         analysis,
-        totalAmount,
-        vix,
-        shouldRotateDefensive,
-        selectedDefensive
+        baseBudget,
+        minBudget,
+        maxBudget
       );
-      
-      if (allocation) {
-        allocations.push(allocation);
-      }
+      allocations.push(allocation);
     }
 
     // Sort by amount descending
@@ -319,152 +195,82 @@ export class PortfolioAllocationEngine {
   }
 
   /**
-   * Calculate allocation for a single asset
+   * Calculate allocation for a single asset using CSS
    */
   private calculateSingleAllocation(
     analysis: StockAnalysis,
-    totalAmount: number,
-    vix: number,
-    shouldRotateDefensive: boolean,
-    selectedDefensive: string | undefined
-  ): PortfolioAllocation | null {
-    const { symbol, technicalIndicators } = analysis;
-    const { rsi, bollingerBands } = technicalIndicators;
+    baseBudget: number,
+    minBudget: number,
+    maxBudget: number
+  ): PortfolioAllocation {
+    const { symbol, cssBreakdown } = analysis;
 
     // Get base allocation percentage
-    const basePercentage = this.getBaseAllocationPercentage(symbol, selectedDefensive);
-    const baseAmount = (totalAmount * basePercentage) / 100;
+    const basePercentage = this.getBaseAllocationPercentage(symbol);
+    const baseAmount = (baseBudget * basePercentage) / 100;
 
-    // Calculate combined multiplier (BB × VIX × RSI)
-    const multiplierBreakdown = this.adjustmentMultiplierService.getMultiplierBreakdown(
-      vix,
-      rsi,
-      bollingerBands
-    );
+    // Apply CSS multiplier
+    const multiplier = cssBreakdown.multiplier;
+    let finalAmount = baseAmount * multiplier;
 
-    // Check if RSI indicates overbought (pause)
-    if (multiplierBreakdown.rsiMultiplier === 0) {
-      return {
-        symbol,
-        amount: 0,
-        percentage: 0,
-        reasoning: `Overbought (RSI=${rsi.toFixed(0)}) - PAUSED 🔴`,
-        baseAmount,
-        multiplier: 0,
-        rsiRecommendation: multiplierBreakdown.rsiRecommendation
-      };
-    }
+    // Apply min/max constraints proportionally
+    const minForAsset = (minBudget * basePercentage) / 100;
+    const maxForAsset = (maxBudget * basePercentage) / 100;
+    finalAmount = Math.max(minForAsset, Math.min(maxForAsset, finalAmount));
+    finalAmount = Math.round(finalAmount);
 
-    // Apply defensive rotation if needed
-    let adjustedMultiplier = multiplierBreakdown.combined;
-    const isDefensiveAsset = this.isDefensiveAsset(symbol);
-
-    if (shouldRotateDefensive) {
-      if (isDefensiveAsset) {
-        adjustedMultiplier *= this.adjustmentMultiplierService.getDefensiveIncreaseMultiplier();
-      } else {
-        // Reduce aggressive assets proportionally
-        adjustedMultiplier *= 0.7;
-      }
-    }
-
-    // Calculate final amount
-    const finalAmount = Math.round(baseAmount * adjustedMultiplier);
-    const finalPercentage = (finalAmount / totalAmount) * 100;
+    const finalPercentage = (finalAmount / baseBudget) * 100;
 
     return {
       symbol,
       amount: finalAmount,
       percentage: Math.round(finalPercentage * 100) / 100,
-      reasoning: this.generateReasoning(analysis, vix, multiplierBreakdown),
+      reasoning: this.generateReasoning(analysis),
       baseAmount: Math.round(baseAmount),
-      multiplier: Math.round(adjustedMultiplier * 1000) / 1000,
-      rsiRecommendation: multiplierBreakdown.rsiRecommendation
+      cssScore: cssBreakdown.totalCSS,
+      multiplier
     };
   }
 
   /**
    * Get base allocation percentage for a symbol
    */
-  private getBaseAllocationPercentage(symbol: string, selectedDefensive: string | undefined): number {
-    // For defensive assets, use the defensive allocation percentage
-    if (ASSET_CATEGORIES.DEFENSIVE.includes(symbol as 'XLV' | 'XLP')) {
-      // Only allocate to the selected defensive asset
-      if (symbol === selectedDefensive) {
-        return DEFENSIVE_ALLOCATION_PERCENTAGE;
-      }
-      return 0; // Don't allocate to non-selected defensive
-    }
-    
-    // Check if symbol has a predefined allocation
+  private getBaseAllocationPercentage(symbol: string): number {
     if (BASE_ALLOCATIONS[symbol]) {
       return BASE_ALLOCATIONS[symbol];
     }
-    
-    // For custom stocks, distribute equally among non-predefined stocks
-    return 20; // Default 20% for custom stocks
-  }
-
-  /**
-   * Check if an asset is defensive
-   */
-  private isDefensiveAsset(symbol: string): boolean {
-    return ASSET_CATEGORIES.DEFENSIVE.includes(symbol as 'XLV' | 'XLP');
-  }
-
-  /**
-   * Calculate average RSI across all analyses
-   */
-  private calculateAverageRSI(analyses: StockAnalysis[]): number {
-    if (analyses.length === 0) return 50;
-    const totalRsi = analyses.reduce((sum, a) => sum + a.technicalIndicators.rsi, 0);
-    return totalRsi / analyses.length;
+    // For unknown assets, use equal distribution
+    return 100 / Object.keys(BASE_ALLOCATIONS).length;
   }
 
   /**
    * Generate reasoning for allocation
    */
-  private generateReasoning(
-    analysis: StockAnalysis,
-    vix: number,
-    multiplierBreakdown: ReturnType<AdjustmentMultiplierService['getMultiplierBreakdown']>
-  ): string {
+  private generateReasoning(analysis: StockAnalysis): string {
+    const { cssBreakdown, technicalIndicators } = analysis;
     const reasons: string[] = [];
-    const { rsi, atr, ma20 } = analysis.technicalIndicators;
-    const price = analysis.marketData.price;
 
-    // RSI-based reason
-    if (rsi < 30) {
-      reasons.push(`RSI oversold (${rsi.toFixed(0)})`);
-    } else if (rsi < 40) {
-      reasons.push(`RSI shows opportunity (${rsi.toFixed(0)})`);
+    // CSS interpretation
+    const cssInterpretation = this.cssService.getCSSInterpretation(cssBreakdown.totalCSS);
+    reasons.push(`CSS ${cssBreakdown.totalCSS.toFixed(0)}: ${cssInterpretation}`);
+
+    // RSI insight
+    if (cssBreakdown.rsiScore >= 80) {
+      reasons.push(`Oversold (RSI ${technicalIndicators.rsi.toFixed(0)})`);
+    } else if (cssBreakdown.rsiScore <= 20) {
+      reasons.push(`Overbought (RSI ${technicalIndicators.rsi.toFixed(0)})`);
     }
 
-    // BB Width-based reason
-    if (multiplierBreakdown.bbWidth > 10) {
-      reasons.push(`High volatility (BB: ${multiplierBreakdown.bbWidth.toFixed(1)}%)`);
+    // MA50 insight
+    if (cssBreakdown.ma50DeviationPercent < -5) {
+      reasons.push(`${Math.abs(cssBreakdown.ma50DeviationPercent).toFixed(1)}% below MA50`);
+    } else if (cssBreakdown.ma50DeviationPercent > 5) {
+      reasons.push(`${cssBreakdown.ma50DeviationPercent.toFixed(1)}% above MA50`);
     }
 
-    // VIX-based reason
-    if (multiplierBreakdown.vixMultiplier > 1) {
-      reasons.push(`Fear premium (VIX: ${vix.toFixed(0)}, ${multiplierBreakdown.vixMultiplier}x)`);
-    }
-
-    // Entry point reason
-    if (ma20 && atr) {
-      const entryThreshold = ma20 - 0.5 * atr;
-      if (price < entryThreshold) {
-        reasons.push(`Below entry target ($${entryThreshold.toFixed(2)})`);
-      }
-    }
-
-    // Momentum reason
-    if (analysis.marketData.changePercent > 2) {
-      reasons.push('Strong momentum');
-    }
-
-    if (reasons.length === 0) {
-      reasons.push('Standard DCA allocation');
+    // F&G fallback note
+    if (cssBreakdown.vixWeightAdjusted) {
+      reasons.push('(VIX weight doubled)');
     }
 
     return reasons.join('; ');
@@ -475,23 +281,19 @@ export class PortfolioAllocationEngine {
    */
   private generateTechnicalData(analyses: StockAnalysis[]): TechnicalDataRow[] {
     return analyses.map(analysis => {
-      const { symbol, marketData, technicalIndicators } = analysis;
-      const { rsi, atr, ma20, bbWidth, bollingerBands } = technicalIndicators;
-      
-      const calculatedMa20 = ma20 ?? bollingerBands.middle;
-      const calculatedBbWidth = bbWidth ?? 
-        ((bollingerBands.upper - bollingerBands.lower) / bollingerBands.middle * 100);
-      const entryPoint = calculatedMa20 - 0.5 * atr;
+      const { symbol, marketData, technicalIndicators, cssBreakdown } = analysis;
       
       return {
         symbol,
         price: Math.round(marketData.price * 100) / 100,
-        rsi: Math.round(rsi * 100) / 100,
-        ma20: Math.round(calculatedMa20 * 100) / 100,
-        atr: Math.round(atr * 100) / 100,
-        bbWidth: Math.round(calculatedBbWidth * 100) / 100,
-        entryPoint: Math.round(entryPoint * 100) / 100,
-        isGoodEntry: marketData.price < entryPoint
+        rsi: Math.round(technicalIndicators.rsi * 100) / 100,
+        ma20: Math.round(technicalIndicators.ma20 * 100) / 100,
+        ma50: Math.round(technicalIndicators.ma50 * 100) / 100,
+        atr: Math.round(technicalIndicators.atr * 100) / 100,
+        bbWidth: Math.round(technicalIndicators.bbWidth * 100) / 100,
+        ma50Deviation: cssBreakdown.ma50DeviationPercent,
+        cssScore: cssBreakdown.totalCSS,
+        multiplier: cssBreakdown.multiplier
       };
     });
   }
@@ -502,56 +304,61 @@ export class PortfolioAllocationEngine {
   private generateRecommendations(
     analyses: StockAnalysis[],
     vix: number,
+    fearGreedIndex: number | null,
     marketCondition: string,
-    riskTolerance: string,
-    selectedDefensive: { symbol: string; score: number; reason: string } | null
+    fearGreedResponse: FearGreedResponse
   ): string[] {
     const recommendations: string[] = [];
-    const vixMultiplier = this.adjustmentMultiplierService.calculateVIXMultiplier(vix);
+
+    // Fear & Greed failure warning
+    if (!fearGreedResponse.success) {
+      recommendations.push('⚠️ Fear & Greed Index fetch FAILED - VIX weight doubled to 40% as fallback');
+    } else {
+      const emoji = this.fearGreedService.getRatingEmoji(fearGreedResponse.rating);
+      recommendations.push(`${emoji} Fear & Greed: ${fearGreedIndex} (${fearGreedResponse.rating})`);
+    }
 
     // Market condition recommendations
     if (marketCondition === 'BEARISH') {
-      recommendations.push('⚠️ High market volatility detected. Defensive rotation active.');
+      recommendations.push('📉 High volatility market. CSS adjustments active.');
     } else if (marketCondition === 'BULLISH') {
-      recommendations.push('✅ Favorable market conditions. Good time for systematic investments.');
+      recommendations.push('📈 Low volatility market. Standard allocations.');
     }
 
     // VIX-specific recommendations
     if (vix > 30) {
-      recommendations.push(`📉 VIX at ${vix.toFixed(1)} indicates extreme fear. Multiplier: ${vixMultiplier}x - This could be a buying opportunity for long-term investors.`);
-    } else if (vix < 12) {
-      recommendations.push('📈 VIX below 12 indicates complacency. Markets may be due for a correction.');
+      recommendations.push(`🔥 VIX at ${vix.toFixed(1)} - Elevated fear, CSS boosting investments.`);
+    } else if (vix < 15) {
+      recommendations.push(`😎 VIX at ${vix.toFixed(1)} - Market complacent, CSS reducing slightly.`);
     }
 
-    // Defensive asset selection explanation
-    if (selectedDefensive) {
-      recommendations.push(`🛡️ Defensive allocation: ${selectedDefensive.symbol} selected (${selectedDefensive.reason})`);
+    // High CSS opportunities
+    const highCSS = analyses.filter(a => a.cssBreakdown.totalCSS >= 60);
+    if (highCSS.length > 0) {
+      recommendations.push(`🎯 High CSS opportunities: ${highCSS.map(a => `${a.symbol} (${a.cssBreakdown.totalCSS.toFixed(0)})`).join(', ')}`);
     }
 
-    // Stock-specific recommendations
-    const priorityBuys = analyses.filter(a => a.technicalIndicators.rsi < 30);
-    if (priorityBuys.length > 0) {
-      recommendations.push(`🎯 PRIORITY BUY (Oversold): ${priorityBuys.map(a => `${a.symbol} (RSI=${a.technicalIndicators.rsi.toFixed(0)})`).join(', ')}`);
+    // Low CSS holdings
+    const lowCSS = analyses.filter(a => a.cssBreakdown.totalCSS <= 35);
+    if (lowCSS.length > 0) {
+      recommendations.push(`📊 Lower allocation (high greed): ${lowCSS.map(a => `${a.symbol} (${a.cssBreakdown.totalCSS.toFixed(0)})`).join(', ')}`);
     }
 
-    const pausedAssets = analyses.filter(a => a.technicalIndicators.rsi > 70);
-    if (pausedAssets.length > 0) {
-      recommendations.push(`🔴 PAUSED (Overbought): ${pausedAssets.map(a => `${a.symbol} (RSI=${a.technicalIndicators.rsi.toFixed(0)})`).join(', ')}`);
+    // Oversold assets
+    const oversold = analyses.filter(a => a.technicalIndicators.rsi < 30);
+    if (oversold.length > 0) {
+      recommendations.push(`💡 Oversold (RSI<30): ${oversold.map(a => a.symbol).join(', ')}`);
     }
 
-    // Entry point opportunities
-    const goodEntries = analyses.filter(a => {
-      const { ma20, atr } = a.technicalIndicators;
-      if (!ma20 || !atr) return false;
-      return a.marketData.price < (ma20 - 0.5 * atr);
-    });
-    if (goodEntries.length > 0) {
-      recommendations.push(`💡 Strong entry points: ${goodEntries.map(a => a.symbol).join(', ')} (Price below MA20 - 0.5×ATR)`);
+    // Below MA50 discounts
+    const discounts = analyses.filter(a => a.cssBreakdown.ma50DeviationPercent < -5);
+    if (discounts.length > 0) {
+      recommendations.push(`🏷️ Discounted (5%+ below MA50): ${discounts.map(a => `${a.symbol} (${a.cssBreakdown.ma50DeviationPercent.toFixed(1)}%)`).join(', ')}`);
     }
 
-    // Risk management
-    recommendations.push('📊 Maintain disciplined investing regardless of market sentiment.');
-    recommendations.push('⏰ Review and rebalance portfolio quarterly to maintain target allocation.');
+    // Budget reminder
+    recommendations.push(`💰 Budget range: $${BUDGET_CONSTRAINTS.MIN_BUDGET} - $${BUDGET_CONSTRAINTS.MAX_BUDGET} (never $0)`);
+    recommendations.push('📊 CSS v4.2: Always invest at least 0.5x, maximum 1.2x');
 
     return recommendations;
   }

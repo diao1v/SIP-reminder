@@ -35,21 +35,23 @@ app.get('/', (c) => {
   const config = loadConfig();
   return c.json({
     name: 'SIP Portfolio Advisor API',
-    version: '1.0.0',
-    description: 'AI-Powered Weekly Investment Allocation System',
+    version: '4.2.0',
+    description: 'CSS (Composite Signal Score) Weekly Investment System',
+    strategy: 'CSS v4.2 - 5 weighted indicators, never pause investing',
     endpoints: {
       'GET /health': 'Health check for monitoring',
       'GET /api/analyze': 'Get latest analysis without sending email',
       'POST /api/analyze': 'Trigger analysis with optional parameters'
     },
     postBodyExample: {
-      investmentAmount: 1500,
-      stocks: ['QQQ', 'GOOG', 'TSLA'],
+      investmentAmount: 300,
+      stocks: ['QQQ', 'GOOG', 'AIQ', 'TSLA', 'XLV', 'VXUS', 'TLT'],
       sendEmail: true
     },
     configuration: {
       cronSchedule: config.cronSchedule,
-      weeklyAmount: config.weeklyInvestmentAmount,
+      baseBudget: config.weeklyInvestmentAmount,
+      budgetRange: `$${config.minBudget} - $${config.maxBudget}`,
       stocks: config.defaultStocks,
       emailRecipients: config.emailTo.length
     }
@@ -81,10 +83,10 @@ async function runScheduledAnalysis(): Promise<void> {
     const engine = new PortfolioAllocationEngine();
     const report = await engine.generateAllocation(config);
 
-    console.log('\n📊 Analysis complete!');
-    console.log(`   VIX: ${report.vix.toFixed(2)} (${report.vixMultiplier}x)`);
-    console.log(`   Market: ${report.marketCondition}`);
-    console.log(`   Allocations: ${report.allocations.length}`);
+    console.log('\n📊 Analysis complete (CSS v4.2)!');
+    console.log(`   VIX: ${report.vix.toFixed(2)} | F&G: ${report.fearGreedIndex ?? 'FAILED'}`);
+    console.log(`   Market CSS: ${report.marketCSS.toFixed(1)} | Condition: ${report.marketCondition}`);
+    console.log(`   Total: $${report.totalAmount.toFixed(0)} (${report.allocations.length} assets)`);
 
     // Send email
     if (config.emailTo.length > 0) {
@@ -112,7 +114,7 @@ async function runScheduledAnalysis(): Promise<void> {
 const config = loadConfig();
 const port = config.port;
 
-console.log('🚀 SIP Portfolio Advisor - AI-Powered Weekly Allocation System');
+console.log('🚀 SIP Portfolio Advisor - CSS Strategy v4.2');
 console.log('='.repeat(60));
 console.log(`📡 Server starting on port ${port}...`);
 
@@ -148,8 +150,8 @@ serve({
   }
   
   console.log('');
-  console.log('Configuration:');
-  console.log(`  💰 Weekly Amount: $${config.weeklyInvestmentAmount}`);
+  console.log('Configuration (CSS v4.2):');
+  console.log(`  💰 Base Budget: $${config.weeklyInvestmentAmount} (Range: $${config.minBudget} - $${config.maxBudget})`);
   console.log(`  📈 Stocks: ${config.defaultStocks.join(', ')}`);
   console.log(`  📧 Email Recipients: ${config.emailTo.length}`);
   console.log('='.repeat(60));

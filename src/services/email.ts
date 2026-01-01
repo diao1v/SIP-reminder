@@ -23,7 +23,7 @@ export class EmailService {
    */
   async sendReport(report: AllocationReport, emailTo: string | string[]): Promise<void> {
     const html = this.generateHTML(report);
-    const subject = `📊 Weekly Portfolio Allocation - ${this.formatDate(report.date)}`;
+    const subject = `📊 Weekly Portfolio Allocation (CSS v4.2) - ${this.formatDate(report.date)}`;
     
     // Convert array to comma-separated string for nodemailer
     const recipients = Array.isArray(emailTo) ? emailTo.join(', ') : emailTo;
@@ -53,7 +53,7 @@ export class EmailService {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Weekly Portfolio Allocation</title>
+  <title>Weekly Portfolio Allocation (CSS v4.2)</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
   <table role="presentation" style="width: 100%; border-collapse: collapse;">
@@ -62,6 +62,7 @@ export class EmailService {
         <table role="presentation" style="max-width: 700px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           
           ${this.generateHeader(report)}
+          ${report.fearGreedFailed ? this.generateFearGreedWarning() : ''}
           ${this.generateMarketOverview(report)}
           ${this.generateAllocationsSection(report)}
           ${this.generateTechnicalDataSection(report)}
@@ -86,6 +87,27 @@ export class EmailService {
             <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px 8px 0 0;">
               <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">📊 Weekly Portfolio Allocation</h1>
               <p style="margin: 10px 0 0; color: #e0e7ff; font-size: 16px;">${this.formatDate(report.date)}</p>
+              <p style="margin: 5px 0 0; color: #c4b5fd; font-size: 12px;">CSS Strategy v4.2</p>
+            </td>
+          </tr>
+    `;
+  }
+
+  /**
+   * Generate Fear & Greed failure warning banner
+   */
+  private generateFearGreedWarning(): string {
+    return `
+          <tr>
+            <td style="padding: 0;">
+              <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px 40px; margin: 0;">
+                <p style="margin: 0; color: #92400e; font-size: 14px; font-weight: 600;">
+                  ⚠️ Fear & Greed Index Fetch Failed
+                </p>
+                <p style="margin: 8px 0 0; color: #b45309; font-size: 13px;">
+                  CNN Fear & Greed data could not be retrieved. VIX weight has been doubled to 40% as fallback.
+                </p>
+              </div>
             </td>
           </tr>
     `;
@@ -96,7 +118,9 @@ export class EmailService {
    */
   private generateMarketOverview(report: AllocationReport): string {
     const { marketConditionColor, marketConditionIcon } = this.getMarketConditionStyle(report.marketCondition);
-    const vixMultiplierDisplay = report.vixMultiplier ? `${report.vixMultiplier}x` : '1.0x';
+    const fearGreedDisplay = report.fearGreedIndex !== null 
+      ? `${report.fearGreedIndex}` 
+      : '<span style="color: #f59e0b;">N/A</span>';
 
     return `
           <tr>
@@ -108,17 +132,21 @@ export class EmailService {
                   <td style="padding: 12px; background-color: #f9fafb; border-radius: 6px;">
                     <table style="width: 100%;">
                       <tr>
-                        <td style="width: 33%;">
-                          <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">VIX Fear Index</div>
+                        <td style="width: 25%;">
+                          <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">VIX</div>
                           <div style="font-size: 24px; color: #1f2937; font-weight: 700;">${report.vix.toFixed(2)}</div>
                         </td>
-                        <td style="width: 33%; text-align: center;">
-                          <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">VIX Multiplier</div>
-                          <div style="font-size: 20px; color: #10b981; font-weight: 600;">${vixMultiplierDisplay}</div>
+                        <td style="width: 25%; text-align: center;">
+                          <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">Fear & Greed</div>
+                          <div style="font-size: 20px; color: #1f2937; font-weight: 600;">${fearGreedDisplay}</div>
                         </td>
-                        <td style="width: 33%; text-align: right;">
-                          <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">Market Condition</div>
-                          <div style="font-size: 20px; font-weight: 600; color: ${marketConditionColor};">
+                        <td style="width: 25%; text-align: center;">
+                          <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">Market CSS</div>
+                          <div style="font-size: 20px; color: #6366f1; font-weight: 600;">${report.marketCSS.toFixed(0)}</div>
+                        </td>
+                        <td style="width: 25%; text-align: right;">
+                          <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">Condition</div>
+                          <div style="font-size: 18px; font-weight: 600; color: ${marketConditionColor};">
                             ${marketConditionIcon} ${report.marketCondition}
                           </div>
                         </td>
@@ -127,6 +155,19 @@ export class EmailService {
                   </td>
                 </tr>
               </table>
+              
+              <div style="margin-top: 16px; padding: 12px; background-color: #eff6ff; border-radius: 6px;">
+                <table style="width: 100%;">
+                  <tr>
+                    <td style="font-size: 13px; color: #1e40af;">
+                      <strong>Budget Range:</strong> $${report.minBudget} - $${report.maxBudget}
+                    </td>
+                    <td style="text-align: right; font-size: 13px; color: #1e40af;">
+                      <strong>This Week:</strong> $${report.totalAmount.toFixed(0)} (${(report.totalAmount / report.baseBudget * 100).toFixed(0)}% of base)
+                    </td>
+                  </tr>
+                </table>
+              </div>
             </td>
           </tr>
     `;
@@ -139,10 +180,9 @@ export class EmailService {
     return `
           <tr>
             <td style="padding: 0 40px 30px;">
-              <h2 style="margin: 0 0 20px; color: #1f2937; font-size: 20px; font-weight: 600;">Investment Allocation Breakdown</h2>
-              <div style="font-size: 14px; color: #6b7280; margin-bottom: 16px;">Weekly Total Budget: <strong style="color: #1f2937;">NZD ${report.totalAmount.toFixed(0)}</strong></div>
+              <h2 style="margin: 0 0 20px; color: #1f2937; font-size: 20px; font-weight: 600;">Investment Allocation (CSS v4.2)</h2>
               
-              ${this.generateAllocationsTable(report.allocations)}
+              ${this.generateAllocationsTable(report.allocations, report.baseBudget)}
             </td>
           </tr>
     `;
@@ -151,9 +191,9 @@ export class EmailService {
   /**
    * Generate allocations table HTML
    */
-  private generateAllocationsTable(allocations: PortfolioAllocation[]): string {
+  private generateAllocationsTable(allocations: PortfolioAllocation[], baseBudget: number): string {
     if (allocations.length === 0) {
-      return '<p style="color: #6b7280; font-style: italic;">No allocations recommended at this time.</p>';
+      return '<p style="color: #6b7280; font-style: italic;">No allocations calculated.</p>';
     }
 
     let html = `
@@ -162,9 +202,9 @@ export class EmailService {
           <tr style="background-color: #f3f4f6;">
             <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">Asset</th>
             <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e5e7eb;">Base</th>
-            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e5e7eb;">BB×VIX×RSI</th>
+            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e5e7eb;">CSS</th>
+            <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e5e7eb;">Multi</th>
             <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e5e7eb;">Final</th>
-            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">RSI Status</th>
           </tr>
         </thead>
         <tbody>
@@ -172,25 +212,27 @@ export class EmailService {
     
     allocations.forEach((allocation, index) => {
       const bgColor = index % 2 === 0 ? '#ffffff' : '#f9fafb';
-      const multiplierDisplay = allocation.multiplier?.toFixed(3) || '1.000';
-      const baseDisplay = allocation.baseAmount ? `NZD ${allocation.baseAmount}` : '-';
+      const cssColor = this.getCSSColor(allocation.cssScore);
       
       html += `
           <tr style="background-color: ${bgColor};">
-            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">
-              ${allocation.symbol}
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">
+              <div style="font-weight: 600;">${allocation.symbol}</div>
+              <div style="font-size: 11px; color: #6b7280; margin-top: 2px;">${allocation.reasoning}</div>
             </td>
             <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #6b7280;">
-              ${baseDisplay}
+              $${allocation.baseAmount}
+            </td>
+            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">
+              <span style="background-color: ${cssColor}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+                ${allocation.cssScore.toFixed(0)}
+              </span>
             </td>
             <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center; color: #6366f1; font-weight: 500;">
-              ×${multiplierDisplay}
+              ${allocation.multiplier}×
             </td>
             <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: 700; color: #1f2937;">
-              NZD ${allocation.amount.toFixed(0)}
-            </td>
-            <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; font-size: 12px;">
-              ${allocation.rsiRecommendation || allocation.reasoning}
+              $${allocation.amount}
             </td>
           </tr>
       `;
@@ -198,17 +240,32 @@ export class EmailService {
 
     // Add total row
     const totalAmount = allocations.reduce((sum, a) => sum + a.amount, 0);
+    const totalMultiplier = totalAmount / baseBudget;
+    
     html += `
           <tr style="background-color: #f3f4f6; font-weight: 700;">
-            <td style="padding: 12px;" colspan="3">TOTAL WEEKLY</td>
-            <td style="padding: 12px; text-align: right; color: #1f2937;">NZD ${totalAmount.toFixed(0)}</td>
-            <td style="padding: 12px;"></td>
+            <td style="padding: 12px;" colspan="2">TOTAL</td>
+            <td style="padding: 12px; text-align: center;"></td>
+            <td style="padding: 12px; text-align: center; color: #6366f1;">${totalMultiplier.toFixed(2)}×</td>
+            <td style="padding: 12px; text-align: right; color: #1f2937;">$${totalAmount.toFixed(0)}</td>
           </tr>
         </tbody>
       </table>
     `;
 
     return html;
+  }
+
+  /**
+   * Get CSS score color
+   */
+  private getCSSColor(css: number): string {
+    if (css <= 20) return '#ef4444'; // Red - Extreme Greed
+    if (css <= 35) return '#f97316'; // Orange - Greed
+    if (css <= 50) return '#eab308'; // Yellow - Slightly Greedy
+    if (css <= 60) return '#22c55e'; // Green - Neutral
+    if (css <= 75) return '#3b82f6'; // Blue - Fear
+    return '#8b5cf6'; // Purple - Extreme Fear
   }
 
   /**
@@ -234,16 +291,16 @@ export class EmailService {
    */
   private generateTechnicalTable(data: TechnicalDataRow[]): string {
     let html = `
-      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
         <thead>
           <tr style="background-color: #f3f4f6;">
-            <th style="padding: 10px; text-align: left; border-bottom: 2px solid #e5e7eb;">Asset</th>
-            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e5e7eb;">Price</th>
-            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e5e7eb;">RSI(14)</th>
-            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e5e7eb;">MA20</th>
-            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e5e7eb;">ATR(14)</th>
-            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e5e7eb;">BB Width</th>
-            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #e5e7eb;">Entry Point</th>
+            <th style="padding: 8px; text-align: left; border-bottom: 2px solid #e5e7eb;">Asset</th>
+            <th style="padding: 8px; text-align: right; border-bottom: 2px solid #e5e7eb;">Price</th>
+            <th style="padding: 8px; text-align: right; border-bottom: 2px solid #e5e7eb;">RSI</th>
+            <th style="padding: 8px; text-align: right; border-bottom: 2px solid #e5e7eb;">MA50</th>
+            <th style="padding: 8px; text-align: right; border-bottom: 2px solid #e5e7eb;">vs MA50</th>
+            <th style="padding: 8px; text-align: right; border-bottom: 2px solid #e5e7eb;">BB Width</th>
+            <th style="padding: 8px; text-align: center; border-bottom: 2px solid #e5e7eb;">CSS</th>
           </tr>
         </thead>
         <tbody>
@@ -251,17 +308,22 @@ export class EmailService {
 
     data.forEach((row, index) => {
       const bgColor = index % 2 === 0 ? '#ffffff' : '#f9fafb';
-      const entryStyle = row.isGoodEntry ? 'color: #10b981; font-weight: 600;' : 'color: #6b7280;';
+      const ma50Color = row.ma50Deviation < -5 ? '#10b981' : row.ma50Deviation > 5 ? '#ef4444' : '#6b7280';
+      const cssColor = this.getCSSColor(row.cssScore);
       
       html += `
           <tr style="background-color: ${bgColor};">
-            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${row.symbol}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">$${row.price.toFixed(2)}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right; ${this.getRSIStyle(row.rsi)}">${row.rsi.toFixed(1)}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">$${row.ma20.toFixed(2)}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">$${row.atr.toFixed(2)}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right;">${row.bbWidth.toFixed(1)}%</td>
-            <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right; ${entryStyle}">$${row.entryPoint.toFixed(2)}${row.isGoodEntry ? ' ✓' : ''}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${row.symbol}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">$${row.price.toFixed(2)}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right; ${this.getRSIStyle(row.rsi)}">${row.rsi.toFixed(1)}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">$${row.ma50.toFixed(2)}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right; color: ${ma50Color}; font-weight: 500;">${row.ma50Deviation > 0 ? '+' : ''}${row.ma50Deviation.toFixed(1)}%</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${row.bbWidth.toFixed(1)}%</td>
+            <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: center;">
+              <span style="background-color: ${cssColor}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 11px; font-weight: 600;">
+                ${row.cssScore.toFixed(0)}
+              </span>
+            </td>
           </tr>
       `;
     });
@@ -281,7 +343,7 @@ export class EmailService {
     return `
           <tr>
             <td style="padding: 0 40px 30px;">
-              <h2 style="margin: 0 0 20px; color: #1f2937; font-size: 20px; font-weight: 600;">Actionable Guidance</h2>
+              <h2 style="margin: 0 0 20px; color: #1f2937; font-size: 20px; font-weight: 600;">Recommendations</h2>
               ${this.generateRecommendationsList(report.recommendations)}
             </td>
           </tr>
@@ -299,17 +361,7 @@ export class EmailService {
     let html = '<ul style="margin: 0; padding: 0; list-style: none;">';
     
     recommendations.forEach(recommendation => {
-      const bgColor = recommendation.includes('PRIORITY') || recommendation.includes('✅') 
-        ? '#f0fdf4' 
-        : recommendation.includes('PAUSE') || recommendation.includes('🔴') || recommendation.includes('⚠️')
-        ? '#fef2f2'
-        : '#f0f9ff';
-      
-      const borderColor = recommendation.includes('PRIORITY') || recommendation.includes('✅')
-        ? '#10b981'
-        : recommendation.includes('PAUSE') || recommendation.includes('🔴') || recommendation.includes('⚠️')
-        ? '#ef4444'
-        : '#3b82f6';
+      const { bgColor, borderColor } = this.getRecommendationStyle(recommendation);
 
       html += `
         <li style="padding: 12px 16px; margin-bottom: 8px; background-color: ${bgColor}; border-left: 4px solid ${borderColor}; border-radius: 4px;">
@@ -325,6 +377,22 @@ export class EmailService {
   }
 
   /**
+   * Get recommendation styling based on content
+   */
+  private getRecommendationStyle(recommendation: string): { bgColor: string; borderColor: string } {
+    if (recommendation.includes('⚠️') || recommendation.includes('FAILED')) {
+      return { bgColor: '#fef3c7', borderColor: '#f59e0b' };
+    }
+    if (recommendation.includes('🎯') || recommendation.includes('💡')) {
+      return { bgColor: '#f0fdf4', borderColor: '#10b981' };
+    }
+    if (recommendation.includes('📉') || recommendation.includes('🔥')) {
+      return { bgColor: '#fef2f2', borderColor: '#ef4444' };
+    }
+    return { bgColor: '#f0f9ff', borderColor: '#3b82f6' };
+  }
+
+  /**
    * Generate footer section
    */
   private generateFooter(): string {
@@ -336,7 +404,7 @@ export class EmailService {
                 Always conduct your own research and consult with a financial advisor before making investment decisions.
               </p>
               <p style="margin: 16px 0 0; color: #9ca3af; font-size: 12px;">
-                Generated by SIP Portfolio Advisor • Five-Dimensional Dynamic Adjustment System
+                Generated by SIP Portfolio Advisor • CSS Strategy v4.2
               </p>
             </td>
           </tr>

@@ -1,18 +1,19 @@
 import * as dotenv from 'dotenv';
 import { Config } from '../types';
+import { BUDGET_CONSTRAINTS } from './multiplierThresholds';
 
 dotenv.config();
 
 /**
- * Default portfolio per specification:
- * QQQ 25% | GOOG 25% | TSLA 20% | AIQ 15% | Defensive (XLV or XLP) 15%
+ * Default portfolio per CSS Strategy v4.2:
+ * QQQ 25% | GOOG 17.5% | AIQ 15% | TSLA 7.5% | XLV 10% | VXUS 10% | TLT 15%
  */
-const DEFAULT_STOCKS = ['QQQ', 'GOOG', 'TSLA', 'AIQ', 'XLV', 'XLP'];
+const DEFAULT_STOCKS = ['QQQ', 'GOOG', 'AIQ', 'TSLA', 'XLV', 'VXUS', 'TLT'];
 
 /**
  * Default weekly investment amount (NZD)
  */
-const DEFAULT_INVESTMENT_AMOUNT = 250;
+const DEFAULT_INVESTMENT_AMOUNT = BUDGET_CONSTRAINTS.BASE_BUDGET;
 
 /**
  * Default server port
@@ -43,17 +44,20 @@ export function loadConfig(): Config {
 
   const config: Config = {
     smtp: {
-      host: process.env.SMTP_HOST!,
-      port: parseInt(process.env.SMTP_PORT!, 10),
-      user: process.env.SMTP_USER!,
-      pass: process.env.SMTP_PASS!
+      host: process.env.SMTP_HOST || '',
+      port: parseInt(process.env.SMTP_PORT || '', 10),
+      user: process.env.SMTP_USER || '',
+      pass: process.env.SMTP_PASS || ''
     },
     emailTo: emails,
     weeklyInvestmentAmount: parseFloat(process.env.WEEKLY_INVESTMENT_AMOUNT || String(DEFAULT_INVESTMENT_AMOUNT)),
     defaultStocks: stocks,
     riskTolerance,
     port: parseInt(process.env.PORT || String(DEFAULT_PORT), 10),
-    cronSchedule: process.env.CRON_SCHEDULE || DEFAULT_CRON_SCHEDULE
+    cronSchedule: process.env.CRON_SCHEDULE || DEFAULT_CRON_SCHEDULE,
+    // Budget constraints from strategy
+    minBudget: BUDGET_CONSTRAINTS.MIN_BUDGET,
+    maxBudget: BUDGET_CONSTRAINTS.MAX_BUDGET
   };
 
   return config;

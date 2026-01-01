@@ -49,9 +49,8 @@ export class TechnicalAnalysisService {
 
   /**
    * Calculate Simple Moving Average (SMA)
-   * MA20 is used for entry point optimization
    */
-  calculateSMA(prices: number[], period: number = 20): number {
+  calculateSMA(prices: number[], period: number): number {
     if (prices.length < period) {
       // Return average of available prices if not enough data
       if (prices.length === 0) return 0;
@@ -68,6 +67,14 @@ export class TechnicalAnalysisService {
    */
   calculateMA20(prices: number[]): number {
     return this.calculateSMA(prices, 20);
+  }
+
+  /**
+   * Calculate MA50 (50-day Moving Average)
+   * Used for CSS price vs MA50 scoring
+   */
+  calculateMA50(prices: number[]): number {
+    return this.calculateSMA(prices, 50);
   }
 
   /**
@@ -160,11 +167,22 @@ export class TechnicalAnalysisService {
   }
 
   /**
+   * Calculate price vs MA50 deviation percentage
+   * Negative = price below MA50 (discount)
+   * Positive = price above MA50 (premium)
+   */
+  calculateMA50Deviation(currentPrice: number, ma50: number): number {
+    if (ma50 === 0) return 0;
+    return Math.round(((currentPrice - ma50) / ma50) * 100 * 100) / 100;
+  }
+
+  /**
    * Calculate all technical indicators for a stock
    */
   calculateIndicators(prices: number[]): TechnicalIndicators {
     const bollingerBands = this.calculateBollingerBands(prices);
     const ma20 = this.calculateMA20(prices);
+    const ma50 = this.calculateMA50(prices);
     const atr = this.calculateATR(prices);
     
     return {
@@ -172,67 +190,57 @@ export class TechnicalAnalysisService {
       bollingerBands,
       bbWidth: this.calculateBBWidth(bollingerBands),
       atr,
-      ma20
+      ma20,
+      ma50
     };
   }
 
   /**
-   * Determine trading signal based on technical indicators
+   * Determine trading signal based on CSS score
+   * In CSS v4.2, we never fully stop - always BUY or HOLD
    */
   analyzeSignal(indicators: TechnicalIndicators, currentPrice: number): {
-    signal: 'BUY' | 'SELL' | 'HOLD';
+    signal: 'BUY' | 'HOLD';
     strength: number;
   } {
-    let buyScore = 0;
-    let sellScore = 0;
+    let strength = 50; // Base strength
 
-    // RSI Analysis (per spec)
+    // RSI contribution
     if (indicators.rsi < 30) {
-      buyScore += 40; // Oversold - strong buy signal
+      strength += 25; // Oversold bonus
+    } else if (indicators.rsi < 40) {
+      strength += 15;
     } else if (indicators.rsi > 70) {
-      sellScore += 50; // Overbought - pause/skip
-    } else if (indicators.rsi >= 30 && indicators.rsi <= 70) {
-      buyScore += 15; // Normal range - standard DCA
+      strength -= 15; // Overbought penalty (but never stops)
     }
 
-    // Bollinger Bands Width Analysis
-    const bbWidth = indicators.bbWidth ?? this.calculateBBWidth(indicators.bollingerBands);
-    if (bbWidth > 10) {
-      buyScore += 20; // High volatility = more opportunities
-    } else if (bbWidth > 5) {
-      buyScore += 10; // Moderate opportunities
+    // BB Width contribution
+    if (indicators.bbWidth > 10) {
+      strength += 15; // High volatility = opportunity
+    } else if (indicators.bbWidth > 5) {
+      strength += 5;
     }
 
-    // Entry Point Analysis (if MA20 available)
-    if (indicators.ma20 && indicators.atr) {
-      if (this.isGoodEntryPoint(currentPrice, indicators.ma20, indicators.atr)) {
-        buyScore += 25; // Strong discount entry
-      }
+    // MA50 contribution
+    const ma50Deviation = this.calculateMA50Deviation(currentPrice, indicators.ma50);
+    if (ma50Deviation < -10) {
+      strength += 20; // Big discount
+    } else if (ma50Deviation < -5) {
+      strength += 10;
+    } else if (ma50Deviation > 10) {
+      strength -= 10; // Expensive
     }
 
-    // ATR Analysis (volatility consideration)
-    const priceATRRatio = indicators.atr / currentPrice;
-    if (priceATRRatio < 0.02) {
-      buyScore += 10; // Low volatility favors buying
-    } else if (priceATRRatio > 0.05) {
-      sellScore += 10; // High volatility suggests caution
+    // Entry point contribution
+    if (this.isGoodEntryPoint(currentPrice, indicators.ma20, indicators.atr)) {
+      strength += 10;
     }
 
-    const totalScore = buyScore - sellScore;
-    
-    let signal: 'BUY' | 'SELL' | 'HOLD';
-    if (indicators.rsi > 70) {
-      // Per spec: RSI > 70 = PAUSE (0.0x multiplier)
-      signal = 'HOLD';
-    } else if (totalScore > 20) {
-      signal = 'BUY';
-    } else if (totalScore < -20) {
-      signal = 'SELL';
-    } else {
-      signal = 'HOLD';
-    }
+    // Clamp strength to 0-100
+    strength = Math.max(0, Math.min(100, strength));
 
-    const strength = Math.min(100, Math.abs(totalScore));
+    // Signal based on strength
+    const signal: 'BUY' | 'HOLD' = strength >= 50 ? 'BUY' : 'HOLD';
 
     return { signal, strength };
   }

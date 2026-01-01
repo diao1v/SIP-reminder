@@ -1,12 +1,55 @@
-import { TechnicalIndicators } from '../types';
+import { RSI, BollingerBands, ATR, SMA } from 'technicalindicators';
+import { TechnicalIndicators, TechnicalIndicatorsWithSource } from '../types';
 
+/**
+ * Technical Analysis Service
+ * 
+ * Uses technicalindicators library as primary calculation engine with
+ * custom implementations as fallback for resilience.
+ */
 export class TechnicalAnalysisService {
+  // Track which source was used
+  private lastDataSource: 'technicalindicators' | 'custom-fallback' = 'technicalindicators';
+
+  /**
+   * Get the last used data source
+   */
+  getLastDataSource(): 'technicalindicators' | 'custom-fallback' {
+    return this.lastDataSource;
+  }
+
   /**
    * Calculate Relative Strength Index (RSI)
-   * RSI measures the speed and magnitude of price changes
-   * Values: 0-100, where >70 = overbought, <30 = oversold
+   * Primary: technicalindicators library
+   * Fallback: Custom implementation
    */
   calculateRSI(prices: number[], period: number = 14): number {
+    // Try technicalindicators library first
+    try {
+      const rsiResult = RSI.calculate({
+        values: prices,
+        period
+      });
+
+      if (rsiResult && rsiResult.length > 0) {
+        const latestRSI = rsiResult[rsiResult.length - 1];
+        if (typeof latestRSI === 'number' && !isNaN(latestRSI)) {
+          this.lastDataSource = 'technicalindicators';
+          return Math.round(latestRSI * 100) / 100;
+        }
+      }
+      throw new Error('Invalid RSI result from library');
+    } catch {
+      console.warn(`⚠️ technicalindicators RSI failed, using custom fallback`);
+      this.lastDataSource = 'custom-fallback';
+      return this.calculateRSICustom(prices, period);
+    }
+  }
+
+  /**
+   * Custom RSI implementation (fallback)
+   */
+  private calculateRSICustom(prices: number[], period: number = 14): number {
     if (prices.length < period + 1) {
       return 50; // Neutral if not enough data
     }
@@ -48,10 +91,103 @@ export class TechnicalAnalysisService {
   }
 
   /**
+   * Calculate Simple Moving Average (SMA)
+   * Primary: technicalindicators library
+   * Fallback: Custom implementation
+   */
+  calculateSMA(prices: number[], period: number): number {
+    // Try technicalindicators library first
+    try {
+      const smaResult = SMA.calculate({
+        values: prices,
+        period
+      });
+
+      if (smaResult && smaResult.length > 0) {
+        const latestSMA = smaResult[smaResult.length - 1];
+        if (typeof latestSMA === 'number' && !isNaN(latestSMA)) {
+          this.lastDataSource = 'technicalindicators';
+          return Math.round(latestSMA * 100) / 100;
+        }
+      }
+      throw new Error('Invalid SMA result from library');
+    } catch {
+      this.lastDataSource = 'custom-fallback';
+      return this.calculateSMACustom(prices, period);
+    }
+  }
+
+  /**
+   * Custom SMA implementation (fallback)
+   */
+  private calculateSMACustom(prices: number[], period: number): number {
+    if (prices.length < period) {
+      // Return average of available prices if not enough data
+      if (prices.length === 0) return 0;
+      return prices.reduce((a, b) => a + b, 0) / prices.length;
+    }
+
+    const relevantPrices = prices.slice(-period);
+    return Math.round((relevantPrices.reduce((a, b) => a + b, 0) / period) * 100) / 100;
+  }
+
+  /**
+   * Calculate MA20 (20-day Moving Average)
+   * Used for trend baseline and entry point optimization
+   */
+  calculateMA20(prices: number[]): number {
+    return this.calculateSMA(prices, 20);
+  }
+
+  /**
+   * Calculate MA50 (50-day Moving Average)
+   * Used for CSS price vs MA50 scoring
+   */
+  calculateMA50(prices: number[]): number {
+    return this.calculateSMA(prices, 50);
+  }
+
+  /**
    * Calculate Bollinger Bands
-   * Measures volatility and potential price reversal points
+   * Primary: technicalindicators library
+   * Fallback: Custom implementation
    */
   calculateBollingerBands(
+    prices: number[],
+    period: number = 20,
+    stdDev: number = 2
+  ): { upper: number; middle: number; lower: number } {
+    // Try technicalindicators library first
+    try {
+      const bbResult = BollingerBands.calculate({
+        values: prices,
+        period,
+        stdDev
+      });
+
+      if (bbResult && bbResult.length > 0) {
+        const latestBB = bbResult[bbResult.length - 1];
+        if (latestBB && typeof latestBB.upper === 'number' && typeof latestBB.middle === 'number' && typeof latestBB.lower === 'number') {
+          this.lastDataSource = 'technicalindicators';
+          return {
+            upper: Math.round(latestBB.upper * 100) / 100,
+            middle: Math.round(latestBB.middle * 100) / 100,
+            lower: Math.round(latestBB.lower * 100) / 100
+          };
+        }
+      }
+      throw new Error('Invalid Bollinger Bands result from library');
+    } catch {
+      console.warn(`⚠️ technicalindicators Bollinger Bands failed, using custom fallback`);
+      this.lastDataSource = 'custom-fallback';
+      return this.calculateBollingerBandsCustom(prices, period, stdDev);
+    }
+  }
+
+  /**
+   * Custom Bollinger Bands implementation (fallback)
+   */
+  private calculateBollingerBandsCustom(
     prices: number[],
     period: number = 20,
     stdDev: number = 2
@@ -80,10 +216,63 @@ export class TechnicalAnalysisService {
   }
 
   /**
+   * Calculate Bollinger Bands Width
+   * BB Width = (Upper - Lower) / Middle × 100%
+   */
+  calculateBBWidth(bollingerBands: { upper: number; middle: number; lower: number }): number {
+    const { upper, middle, lower } = bollingerBands;
+    if (middle === 0) return 0;
+    return Math.round(((upper - lower) / middle) * 100 * 100) / 100;
+  }
+
+  /**
    * Calculate Average True Range (ATR)
-   * Measures market volatility
+   * Primary: technicalindicators library
+   * Fallback: Custom implementation
+   * Note: Library requires high/low/close arrays; we approximate from close prices
    */
   calculateATR(prices: number[], period: number = 14): number {
+    // Try technicalindicators library first
+    try {
+      // Convert close prices to high/low/close approximation
+      const high: number[] = [];
+      const low: number[] = [];
+      const close: number[] = [];
+
+      for (let i = 0; i < prices.length; i++) {
+        const price = prices[i];
+        // Approximate high/low from close (±1%)
+        high.push(price * 1.01);
+        low.push(price * 0.99);
+        close.push(price);
+      }
+
+      const atrResult = ATR.calculate({
+        high,
+        low,
+        close,
+        period
+      });
+
+      if (atrResult && atrResult.length > 0) {
+        const latestATR = atrResult[atrResult.length - 1];
+        if (typeof latestATR === 'number' && !isNaN(latestATR)) {
+          this.lastDataSource = 'technicalindicators';
+          return Math.round(latestATR * 100) / 100;
+        }
+      }
+      throw new Error('Invalid ATR result from library');
+    } catch {
+      console.warn(`⚠️ technicalindicators ATR failed, using custom fallback`);
+      this.lastDataSource = 'custom-fallback';
+      return this.calculateATRCustom(prices, period);
+    }
+  }
+
+  /**
+   * Custom ATR implementation (fallback)
+   */
+  private calculateATRCustom(prices: number[], period: number = 14): number {
     if (prices.length < 2) {
       return 0;
     }
@@ -104,67 +293,106 @@ export class TechnicalAnalysisService {
   }
 
   /**
-   * Calculate all technical indicators for a stock
+   * Calculate entry point optimization
+   * Buy signal: Price < MA20 - 0.5×ATR (strong discount)
    */
-  calculateIndicators(prices: number[]): TechnicalIndicators {
+  calculateEntryPoint(ma20: number, atr: number): {
+    strongBuyBelow: number;
+    targetEntry: number;
+  } {
+    const strongBuyBelow = Math.round((ma20 - 0.5 * atr) * 100) / 100;
     return {
-      rsi: this.calculateRSI(prices),
-      bollingerBands: this.calculateBollingerBands(prices),
-      atr: this.calculateATR(prices)
+      strongBuyBelow,
+      targetEntry: ma20
     };
   }
 
   /**
-   * Determine trading signal based on technical indicators
+   * Check if current price is at a good entry point
+   */
+  isGoodEntryPoint(currentPrice: number, ma20: number, atr: number): boolean {
+    const entryThreshold = ma20 - 0.5 * atr;
+    return currentPrice < entryThreshold;
+  }
+
+  /**
+   * Calculate price vs MA50 deviation percentage
+   * Negative = price below MA50 (discount)
+   * Positive = price above MA50 (premium)
+   */
+  calculateMA50Deviation(currentPrice: number, ma50: number): number {
+    if (ma50 === 0) return 0;
+    return Math.round(((currentPrice - ma50) / ma50) * 100 * 100) / 100;
+  }
+
+  /**
+   * Calculate all technical indicators for a stock
+   * Returns indicators with source tracking
+   */
+  calculateIndicators(prices: number[]): TechnicalIndicatorsWithSource {
+    const bollingerBands = this.calculateBollingerBands(prices);
+    const ma20 = this.calculateMA20(prices);
+    const ma50 = this.calculateMA50(prices);
+    const atr = this.calculateATR(prices);
+    const rsi = this.calculateRSI(prices);
+    
+    return {
+      rsi,
+      bollingerBands,
+      bbWidth: this.calculateBBWidth(bollingerBands),
+      atr,
+      ma20,
+      ma50,
+      dataSource: this.lastDataSource
+    };
+  }
+
+  /**
+   * Determine trading signal based on CSS score
+   * In CSS v4.2, we never fully stop - always BUY or HOLD
    */
   analyzeSignal(indicators: TechnicalIndicators, currentPrice: number): {
-    signal: 'BUY' | 'SELL' | 'HOLD';
+    signal: 'BUY' | 'HOLD';
     strength: number;
   } {
-    let buyScore = 0;
-    let sellScore = 0;
+    let strength = 50; // Base strength
 
-    // RSI Analysis
+    // RSI contribution
     if (indicators.rsi < 30) {
-      buyScore += 30; // Oversold
+      strength += 25; // Oversold bonus
+    } else if (indicators.rsi < 40) {
+      strength += 15;
     } else if (indicators.rsi > 70) {
-      sellScore += 30; // Overbought
-    } else if (indicators.rsi >= 40 && indicators.rsi <= 60) {
-      buyScore += 10; // Neutral to bullish
+      strength -= 15; // Overbought penalty (but never stops)
     }
 
-    // Bollinger Bands Analysis
-    const { upper, middle, lower } = indicators.bollingerBands;
-    const bbPosition = (currentPrice - lower) / (upper - lower);
-
-    if (bbPosition < 0.2) {
-      buyScore += 25; // Near lower band
-    } else if (bbPosition > 0.8) {
-      sellScore += 25; // Near upper band
-    } else if (bbPosition >= 0.4 && bbPosition <= 0.6) {
-      buyScore += 10; // Middle range
+    // BB Width contribution
+    if (indicators.bbWidth > 10) {
+      strength += 15; // High volatility = opportunity
+    } else if (indicators.bbWidth > 5) {
+      strength += 5;
     }
 
-    // ATR Analysis (volatility consideration)
-    const priceATRRatio = indicators.atr / currentPrice;
-    if (priceATRRatio < 0.02) {
-      buyScore += 15; // Low volatility favors buying
-    } else if (priceATRRatio > 0.05) {
-      sellScore += 15; // High volatility suggests caution
+    // MA50 contribution
+    const ma50Deviation = this.calculateMA50Deviation(currentPrice, indicators.ma50);
+    if (ma50Deviation < -10) {
+      strength += 20; // Big discount
+    } else if (ma50Deviation < -5) {
+      strength += 10;
+    } else if (ma50Deviation > 10) {
+      strength -= 10; // Expensive
     }
 
-    const totalScore = buyScore - sellScore;
-    
-    let signal: 'BUY' | 'SELL' | 'HOLD';
-    if (totalScore > 20) {
-      signal = 'BUY';
-    } else if (totalScore < -20) {
-      signal = 'SELL';
-    } else {
-      signal = 'HOLD';
+    // Entry point contribution
+    if (this.isGoodEntryPoint(currentPrice, indicators.ma20, indicators.atr)) {
+      strength += 10;
     }
 
-    const strength = Math.min(100, Math.abs(totalScore));
+    // Clamp strength to 0-100
+    strength = Math.max(0, Math.min(100, strength));
+
+    // Signal based on strength
+    const signal: 'BUY' | 'HOLD' = strength >= 50 ? 'BUY' : 'HOLD';
 
     return { signal, strength };
   }

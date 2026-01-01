@@ -11,12 +11,12 @@ npm run dev
 ## Sample Output
 
 ```
-🚀 SIP Portfolio Advisor - AI-Powered Weekly Allocation System
+🚀 SIP Portfolio Reminder Bot - CSS Strategy v4.2
 ======================================================================
 
 📋 Configuration:
    Investment Amount: $1000
-   Stocks: AAPL, MSFT, GOOGL, AMZN, SPY
+   Stocks: QQQ, GOOG, AIQ, TSLA, XLV, VXUS, TLT
    Risk Tolerance: moderate
    Email: investor@example.com
 ======================================================================

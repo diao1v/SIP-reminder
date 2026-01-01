@@ -1,21 +1,52 @@
-# SIP Portfolio Advisor 📊
+# SIP Portfolio Reminder Bot 📊
 
-AI-powered weekly portfolio allocation system with automated technical analysis and professional email reporting.
+Weekly portfolio allocation system using **CSS (Composite Signal Score) v4.2** strategy with automated technical analysis and professional email reporting.
 
 ## 🌟 Features
 
-- **Real-time Market Data**: Fetches VIX, stock prices, and market indicators
-- **Technical Analysis**: Calculates RSI, Bollinger Bands, and ATR for each stock
-- **AI-Powered Allocation**: Multi-dimensional adjustment system determines exact investment amounts
-- **Professional Reports**: Sends beautifully formatted HTML email reports with actionable insights
-- **Risk Management**: Adjusts allocations based on VIX levels and risk tolerance
-- **Systematic Approach**: Emotion-free, disciplined portfolio management
+- **CSS Strategy v4.2**: 5-indicator weighted scoring system that never pauses investing
+- **Real-time Market Data**: Fetches VIX, stock prices, and Fear & Greed Index from CNN
+- **Technical Analysis**: Calculates RSI, Bollinger Bands, ATR, MA20, and MA50
+- **Smart Allocation**: CSS score determines investment multiplier (0.5x - 1.2x)
+- **Professional Reports**: Beautifully formatted HTML email with CSS breakdown
+- **Fallback Safety**: VIX weight doubles if Fear & Greed scraping fails
+- **Budget Caps**: Never invest less than 50% or more than 120% of base budget
+
+## 📈 CSS Strategy v4.2
+
+### Portfolio Allocation
+| Asset | Allocation | Category |
+|-------|------------|----------|
+| QQQ   | 25%        | Growth - Tech ETF |
+| GOOG  | 17.5%      | Growth - AI/Cloud leader |
+| AIQ   | 15%        | Growth - AI/Robotics theme |
+| TSLA  | 7.5%       | Growth - High-volatility |
+| XLV   | 10%        | Defensive - Healthcare |
+| VXUS  | 10%        | International - Non-US |
+| TLT   | 15%        | Hedge - Treasury bonds |
+
+### CSS Formula
+```
+CSS = (VIX × 20%) + (RSI × 25%) + (BB Width × 15%) + (MA50 × 20%) + (Fear & Greed × 20%)
+```
+
+### CSS to Multiplier Mapping
+| CSS Score | Interpretation | Multiplier |
+|-----------|----------------|------------|
+| 0-20      | Extreme Greed  | 0.5x (minimum) |
+| 21-35     | Greed          | 0.6x |
+| 36-50     | Slightly Greedy | 0.8x |
+| 51-60     | Neutral        | 1.0x |
+| 61-75     | Fear           | 1.2x |
+| 76-100    | Extreme Fear   | 1.2x (capped) |
+
+**Key Principle**: Never pause investing. Even in extreme greed, invest at 50% of base.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 18+ and pnpm
 - Email account with SMTP access (Gmail recommended)
 
 ### Installation
@@ -26,7 +57,7 @@ git clone https://github.com/diao1v/SIP-reminder.git
 cd SIP-reminder
 
 # Install dependencies
-npm install
+pnpm install
 
 # Configure environment variables
 cp .env.example .env
@@ -35,20 +66,24 @@ cp .env.example .env
 
 ### Configuration
 
-Edit `.env` file with your settings:
+Create a `.env` file with your settings:
 
 ```env
-# Email Configuration
+# Email Configuration (Required)
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
-EMAIL_TO=recipient@example.com
+EMAIL_TO=recipient1@example.com,recipient2@example.com
 
-# Portfolio Configuration
-WEEKLY_INVESTMENT_AMOUNT=1000
-DEFAULT_STOCKS=AAPL,MSFT,GOOGL,AMZN,SPY
+# Portfolio Configuration (Optional - defaults shown)
+WEEKLY_INVESTMENT_AMOUNT=250
+DEFAULT_STOCKS=QQQ,GOOG,AIQ,TSLA,XLV,VXUS,TLT
 RISK_TOLERANCE=moderate
+
+# Server Configuration (Optional)
+PORT=3002
+CRON_SCHEDULE=0 20 * * 3
 ```
 
 **For Gmail**: Generate an [App Password](https://support.google.com/accounts/answer/185833) instead of using your regular password.
@@ -57,109 +92,78 @@ RISK_TOLERANCE=moderate
 
 ```bash
 # Build the project
-npm run build
+pnpm build
 
-# Run the application
-npm start
+# Run in development mode (with hot reload)
+pnpm dev
 
-# Or run directly with ts-node (development)
-npm run dev
+# Run production build
+pnpm start
 ```
 
-## 📖 How It Works
+## 🔌 API Endpoints
 
-### 1. Market Data Collection
-- Fetches real-time stock prices from Yahoo Finance API
-- Retrieves VIX (Volatility Index) for market sentiment
-- Collects historical data for technical analysis
+Once running, the server exposes:
 
-### 2. Technical Analysis
-For each stock, the system calculates:
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | API info and configuration |
+| `/health` | GET | Health check for monitoring |
+| `/api/analyze` | GET | Get latest analysis without email |
+| `/api/analyze` | POST | Trigger analysis with options |
 
-- **RSI (Relative Strength Index)**: Identifies overbought/oversold conditions
-  - < 30: Oversold (potential buy)
-  - > 70: Overbought (potential sell)
-  
-- **Bollinger Bands**: Measures volatility and price extremes
-  - Price near lower band: Potential buy
-  - Price near upper band: Potential sell
-  
-- **ATR (Average True Range)**: Quantifies market volatility
-  - Lower ATR: More stable, favorable for buying
-  - Higher ATR: More volatile, proceed with caution
+### POST /api/analyze
 
-### 3. Multi-Dimensional Allocation System
-
-The AI engine applies multiple adjustment layers:
-
-1. **Signal Strength**: Base score from technical indicators
-2. **RSI Adjustment**: Bonuses for oversold, penalties for overbought
-3. **Bollinger Position**: Enhanced weighting for extreme positions
-4. **Volatility Factor**: ATR-based risk adjustment
-5. **VIX Adjustment**: Market-wide sentiment modifier
-6. **Risk Tolerance**: User preference scaling
-
-### 4. Report Generation
-
-Generates a professional HTML email with:
-- Market overview (VIX, market condition)
-- Detailed allocations with reasoning
-- Expert recommendations
-- Risk disclaimers
+```json
+{
+  "investmentAmount": 300,
+  "stocks": ["QQQ", "GOOG", "TSLA"],
+  "sendEmail": true
+}
+```
 
 ## 📊 Example Output
 
 ```
-🚀 SIP Portfolio Advisor - AI-Powered Weekly Allocation System
-======================================================================
+🚀 SIP Portfolio Reminder Bot - CSS Strategy v4.2
+============================================================
+📡 Server starting on port 3002...
+✅ Server running at http://localhost:3002
 
-📋 Configuration:
-   Investment Amount: $1000
-   Stocks: AAPL, MSFT, GOOGL, AMZN, SPY
-   Risk Tolerance: moderate
-   Email: investor@example.com
+Available endpoints:
+  GET  http://localhost:3002/health
+  GET  http://localhost:3002/api/analyze
+  POST http://localhost:3002/api/analyze
 
-🤖 Running AI-powered analysis...
+⏰ Cron scheduler enabled: 0 20 * * 3
+   (Wednesday at 20:00)
+   Timezone: Pacific/Auckland (NZST)
 
-🔍 Fetching market data and analyzing...
-📊 VIX: 16.45 - Market: NEUTRAL
-✓ Analyzed AAPL: BUY (strength: 65)
-✓ Analyzed MSFT: BUY (strength: 72)
-✓ Analyzed GOOGL: HOLD (strength: 45)
+Configuration:
+  💰 Base Budget: $250 (Range: $125 - $300)
+  📈 Stocks: QQQ, GOOG, AIQ, TSLA, XLV, VXUS, TLT
+  📧 Email Recipients: 2
+============================================================
 
-======================================================================
-📊 ALLOCATION RESULTS
-======================================================================
-VIX: 16.45
-Market Condition: NEUTRAL
+--- Analysis triggered ---
+📊 Fetching Fear & Greed Index from CNN...
+✅ Fear & Greed Index: 44 (Fear)
+📈 Fetching market data...
+✅ VIX: 14.95
 
-Recommended Allocations:
-
-  MSFT:
-    Amount: $580.00 (58.0%)
-    Reason: RSI shows potential buying opportunity; Price near lower Bollinger Band; Low volatility environment
-
-  AAPL:
-    Amount: $420.00 (42.0%)
-    Reason: RSI shows potential buying opportunity; Low volatility environment
-
-📝 Recommendations:
-  • ✅ Favorable market conditions. Good time for systematic investments.
-  • 🎯 Strong buy signals detected for: MSFT, AAPL
-  • 📊 Maintain disciplined investing regardless of market sentiment.
-  • ⏰ Review and rebalance portfolio quarterly to maintain target allocation.
-
-======================================================================
-📧 Sending email report...
-✅ Email sent successfully!
-✨ Process completed successfully!
+📊 Analysis complete (CSS v4.2)!
+   VIX: 14.95 | F&G: 44
+   Market CSS: 52.3 | Condition: NEUTRAL
+   Total: $248 (7 assets)
 ```
 
 ## 🛠️ Technology Stack
 
-- **Node.js/TypeScript**: Core application framework
-- **Axios**: HTTP client for API requests
-- **Nodemailer**: Email delivery system
+- **Hono**: Fast, lightweight web framework
+- **Node.js/TypeScript**: Core application
+- **Axios**: HTTP client for market data
+- **Nodemailer**: Email delivery
+- **node-cron**: Scheduled execution
 - **dotenv**: Environment configuration
 
 ## ⚙️ Advanced Configuration
@@ -170,23 +174,24 @@ Recommended Allocations:
 - **Moderate** (1.0x): Balanced approach (default)
 - **Aggressive** (1.2x): Enhanced exposure for higher potential returns
 
-### VIX-Based Adjustments
+### Cron Schedule Format
 
-- < 12: Very low volatility (+20% exposure)
-- 12-15: Low volatility (+10% exposure)
-- 15-20: Normal (baseline)
-- 20-25: Elevated (-10% exposure)
-- 25-30: High volatility (-20% exposure)
-- > 30: Extreme volatility (-30% exposure)
-
-## 📅 Scheduling (Optional)
-
-To run weekly automatically, use cron (Linux/Mac) or Task Scheduler (Windows):
-
-```bash
-# Run every Monday at 9 AM
-0 9 * * 1 cd /path/to/SIP-reminder && npm start
 ```
+┌───────────── minute (0 - 59)
+│ ┌───────────── hour (0 - 23)
+│ │ ┌───────────── day of month (1 - 31)
+│ │ │ ┌───────────── month (1 - 12)
+│ │ │ │ ┌───────────── day of week (0 - 6) (Sunday = 0)
+│ │ │ │ │
+0 20 * * 3   = Every Wednesday at 8:00 PM
+```
+
+### Fear & Greed Fallback
+
+If CNN Fear & Greed Index scraping fails:
+- VIX weight automatically doubles from 20% to 40%
+- Email report shows ⚠️ warning indicator
+- Analysis continues with adjusted CSS calculation
 
 ## 🔒 Security Best Practices
 

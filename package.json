@@ -1,36 +1,43 @@
 {
   "name": "sip-reminder",
   "version": "1.0.0",
-  "description": "AI-powered weekly portfolio allocation system with automated technical analysis and email reporting",
+  "description": "Weekly portfolio allocation system with automated technical analysis and email reporting",
   "main": "dist/index.js",
+  "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "test": "jest",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src"
   },
   "keywords": [
     "portfolio",
     "investment",
     "automation",
-    "technical-analysis",
-    "ai"
+    "technical-analysis"
   ],
-  "author": "",
+  "author": "Tuicaodan",
   "license": "MIT",
   "dependencies": {
+    "@hono/node-server": "^1.13.7",
     "axios": "^1.6.0",
     "dotenv": "^16.3.1",
-    "nodemailer": "^6.9.7"
+    "hono": "^4.6.14",
+    "mathjs": "^14.0.1",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.7",
+    "technicalindicators": "^3.1.0",
+    "yahoo-finance2": "^3.10.2"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "@types/node": "^20.10.0",
+    "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^6.4.14",
-    "@typescript-eslint/eslint-plugin": "^6.13.0",
-    "@typescript-eslint/parser": "^6.13.0",
-    "eslint": "^8.54.0",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.3.2"
+    "eslint": "^9.39.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.51.0"
   }
 }

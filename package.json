@@ -1,7 +1,7 @@
 {
   "name": "sip-reminder",
   "version": "1.0.0",
-  "description": "AI-powered weekly portfolio allocation system with automated technical analysis and email reporting",
+  "description": "Weekly portfolio allocation system with automated technical analysis and email reporting",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
@@ -15,10 +15,9 @@
     "portfolio",
     "investment",
     "automation",
-    "technical-analysis",
-    "ai"
+    "technical-analysis"
   ],
-  "author": "",
+  "author": "Tuicaodan",
   "license": "MIT",
   "dependencies": {
     "@hono/node-server": "^1.13.7",

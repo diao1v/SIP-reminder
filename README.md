@@ -1,4 +1,4 @@
-# SIP Portfolio Advisor 📊
+# SIP Portfolio Reminder Bot 📊
 
 Weekly portfolio allocation system using **CSS (Composite Signal Score) v4.2** strategy with automated technical analysis and professional email reporting.
 
@@ -125,7 +125,7 @@ Once running, the server exposes:
 ## 📊 Example Output
 
 ```
-🚀 SIP Portfolio Advisor - AI-Powered Weekly Allocation System
+🚀 SIP Portfolio Reminder Bot - CSS Strategy v4.2
 ============================================================
 📡 Server starting on port 3002...
 ✅ Server running at http://localhost:3002

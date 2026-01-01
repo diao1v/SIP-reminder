@@ -48,6 +48,29 @@ export class TechnicalAnalysisService {
   }
 
   /**
+   * Calculate Simple Moving Average (SMA)
+   * MA20 is used for entry point optimization
+   */
+  calculateSMA(prices: number[], period: number = 20): number {
+    if (prices.length < period) {
+      // Return average of available prices if not enough data
+      if (prices.length === 0) return 0;
+      return prices.reduce((a, b) => a + b, 0) / prices.length;
+    }
+
+    const relevantPrices = prices.slice(-period);
+    return Math.round((relevantPrices.reduce((a, b) => a + b, 0) / period) * 100) / 100;
+  }
+
+  /**
+   * Calculate MA20 (20-day Moving Average)
+   * Used for trend baseline and entry point optimization
+   */
+  calculateMA20(prices: number[]): number {
+    return this.calculateSMA(prices, 20);
+  }
+
+  /**
    * Calculate Bollinger Bands
    * Measures volatility and potential price reversal points
    */
@@ -80,6 +103,16 @@ export class TechnicalAnalysisService {
   }
 
   /**
+   * Calculate Bollinger Bands Width
+   * BB Width = (Upper - Lower) / Middle × 100%
+   */
+  calculateBBWidth(bollingerBands: { upper: number; middle: number; lower: number }): number {
+    const { upper, middle, lower } = bollingerBands;
+    if (middle === 0) return 0;
+    return Math.round(((upper - lower) / middle) * 100 * 100) / 100;
+  }
+
+  /**
    * Calculate Average True Range (ATR)
    * Measures market volatility
    */
@@ -104,13 +137,42 @@ export class TechnicalAnalysisService {
   }
 
   /**
+   * Calculate entry point optimization
+   * Buy signal: Price < MA20 - 0.5×ATR (strong discount)
+   */
+  calculateEntryPoint(ma20: number, atr: number): {
+    strongBuyBelow: number;
+    targetEntry: number;
+  } {
+    const strongBuyBelow = Math.round((ma20 - 0.5 * atr) * 100) / 100;
+    return {
+      strongBuyBelow,
+      targetEntry: ma20
+    };
+  }
+
+  /**
+   * Check if current price is at a good entry point
+   */
+  isGoodEntryPoint(currentPrice: number, ma20: number, atr: number): boolean {
+    const entryThreshold = ma20 - 0.5 * atr;
+    return currentPrice < entryThreshold;
+  }
+
+  /**
    * Calculate all technical indicators for a stock
    */
   calculateIndicators(prices: number[]): TechnicalIndicators {
+    const bollingerBands = this.calculateBollingerBands(prices);
+    const ma20 = this.calculateMA20(prices);
+    const atr = this.calculateATR(prices);
+    
     return {
       rsi: this.calculateRSI(prices),
-      bollingerBands: this.calculateBollingerBands(prices),
-      atr: this.calculateATR(prices)
+      bollingerBands,
+      bbWidth: this.calculateBBWidth(bollingerBands),
+      atr,
+      ma20
     };
   }
 
@@ -124,39 +186,45 @@ export class TechnicalAnalysisService {
     let buyScore = 0;
     let sellScore = 0;
 
-    // RSI Analysis
+    // RSI Analysis (per spec)
     if (indicators.rsi < 30) {
-      buyScore += 30; // Oversold
+      buyScore += 40; // Oversold - strong buy signal
     } else if (indicators.rsi > 70) {
-      sellScore += 30; // Overbought
-    } else if (indicators.rsi >= 40 && indicators.rsi <= 60) {
-      buyScore += 10; // Neutral to bullish
+      sellScore += 50; // Overbought - pause/skip
+    } else if (indicators.rsi >= 30 && indicators.rsi <= 70) {
+      buyScore += 15; // Normal range - standard DCA
     }
 
-    // Bollinger Bands Analysis
-    const { upper, middle, lower } = indicators.bollingerBands;
-    const bbPosition = (currentPrice - lower) / (upper - lower);
+    // Bollinger Bands Width Analysis
+    const bbWidth = indicators.bbWidth ?? this.calculateBBWidth(indicators.bollingerBands);
+    if (bbWidth > 10) {
+      buyScore += 20; // High volatility = more opportunities
+    } else if (bbWidth > 5) {
+      buyScore += 10; // Moderate opportunities
+    }
 
-    if (bbPosition < 0.2) {
-      buyScore += 25; // Near lower band
-    } else if (bbPosition > 0.8) {
-      sellScore += 25; // Near upper band
-    } else if (bbPosition >= 0.4 && bbPosition <= 0.6) {
-      buyScore += 10; // Middle range
+    // Entry Point Analysis (if MA20 available)
+    if (indicators.ma20 && indicators.atr) {
+      if (this.isGoodEntryPoint(currentPrice, indicators.ma20, indicators.atr)) {
+        buyScore += 25; // Strong discount entry
+      }
     }
 
     // ATR Analysis (volatility consideration)
     const priceATRRatio = indicators.atr / currentPrice;
     if (priceATRRatio < 0.02) {
-      buyScore += 15; // Low volatility favors buying
+      buyScore += 10; // Low volatility favors buying
     } else if (priceATRRatio > 0.05) {
-      sellScore += 15; // High volatility suggests caution
+      sellScore += 10; // High volatility suggests caution
     }
 
     const totalScore = buyScore - sellScore;
     
     let signal: 'BUY' | 'SELL' | 'HOLD';
-    if (totalScore > 20) {
+    if (indicators.rsi > 70) {
+      // Per spec: RSI > 70 = PAUSE (0.0x multiplier)
+      signal = 'HOLD';
+    } else if (totalScore > 20) {
       signal = 'BUY';
     } else if (totalScore < -20) {
       signal = 'SELL';

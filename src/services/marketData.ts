@@ -1,39 +1,78 @@
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import { MarketData } from '../types';
+
+interface YahooChartResponse {
+  chart: {
+    result: Array<{
+      meta: {
+        regularMarketPrice: number;
+        previousClose?: number;
+        chartPreviousClose?: number;
+      };
+      indicators: {
+        quote: Array<{
+          close: (number | null)[];
+          volume: (number | null)[];
+        }>;
+      };
+    }>;
+  };
+}
 
 export class MarketDataService {
   private static readonly VIX_SYMBOL = '^VIX';
-  
+  private static readonly BASE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart';
+  private static readonly DEFAULT_HEADERS = {
+    'User-Agent': 'Mozilla/5.0'
+  };
+
+  /**
+   * Make a request to Yahoo Finance API
+   * Centralized API call logic to avoid duplication
+   */
+  private async fetchFromYahoo<T>(
+    symbol: string,
+    params: Record<string, string>
+  ): Promise<T> {
+    const config: AxiosRequestConfig = {
+      params,
+      headers: MarketDataService.DEFAULT_HEADERS
+    };
+
+    const response = await axios.get<T>(
+      `${MarketDataService.BASE_URL}/${symbol}`,
+      config
+    );
+
+    return response.data;
+  }
+
+  /**
+   * Validate Yahoo Finance response structure
+   */
+  private validateChartResponse(data: YahooChartResponse): boolean {
+    return !!(data?.chart?.result?.[0]);
+  }
+
   /**
    * Fetches real-time market data for a given stock symbol
-   * Uses Yahoo Finance API alternative (free, no API key required)
+   * Uses Yahoo Finance API (free, ~15min delay)
    */
   async fetchStockData(symbol: string): Promise<MarketData> {
     try {
-      // Using a free API endpoint that doesn't require authentication
-      // In production, consider using Alpha Vantage, IEX Cloud, or similar
-      const response = await axios.get(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`,
-        {
-          params: {
-            interval: '1d',
-            range: '5d'
-          },
-          headers: {
-            'User-Agent': 'Mozilla/5.0'
-          }
-        }
-      );
+      const data = await this.fetchFromYahoo<YahooChartResponse>(symbol, {
+        interval: '1d',
+        range: '5d'
+      });
 
-      // Validate response structure
-      if (!response.data?.chart?.result?.[0]) {
+      if (!this.validateChartResponse(data)) {
         throw new Error('Invalid response structure from API');
       }
 
-      const result = response.data.chart.result[0];
+      const result = data.chart.result[0];
       const quote = result.meta;
       const currentPrice = quote.regularMarketPrice;
-      const previousClose = quote.previousClose || quote.chartPreviousClose;
+      const previousClose = quote.previousClose || quote.chartPreviousClose || currentPrice;
 
       return {
         symbol,
@@ -46,7 +85,6 @@ export class MarketDataService {
       };
     } catch (error) {
       console.error(`Error fetching data for ${symbol}:`, error);
-      // Return simulated data for development/testing
       return this.getSimulatedData(symbol);
     }
   }
@@ -56,30 +94,22 @@ export class MarketDataService {
    */
   async fetchHistoricalData(symbol: string, days: number = 30): Promise<number[]> {
     try {
-      const response = await axios.get(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`,
-        {
-          params: {
-            interval: '1d',
-            range: `${days}d`
-          },
-          headers: {
-            'User-Agent': 'Mozilla/5.0'
-          }
-        }
-      );
+      const data = await this.fetchFromYahoo<YahooChartResponse>(symbol, {
+        interval: '1d',
+        range: `${days}d`
+      });
 
-      // Validate response structure
-      if (!response.data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close) {
+      if (!data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close) {
         throw new Error('Invalid response structure from API');
       }
 
-      const result = response.data.chart.result[0];
-      const closes = result.indicators.quote[0].close.filter((p: number | null) => p !== null);
+      const result = data.chart.result[0];
+      const closes = result.indicators.quote[0].close
+        .filter((p): p is number => p !== null);
+      
       return closes;
     } catch (error) {
       console.error(`Error fetching historical data for ${symbol}:`, error);
-      // Return simulated data
       return this.getSimulatedHistoricalData(days);
     }
   }
@@ -99,11 +129,13 @@ export class MarketDataService {
   }
 
   /**
-   * Simulated data for development/testing
+   * Simulated data for development/testing when API is unavailable
    */
   private getSimulatedData(symbol: string): MarketData {
-    const basePrice = 100 + Math.random() * 400;
-    const previousClose = basePrice * (0.98 + Math.random() * 0.04);
+    // Use consistent pseudo-random values based on symbol
+    const seed = this.hashSymbol(symbol);
+    const basePrice = 100 + (seed % 400);
+    const previousClose = basePrice * (0.98 + (seed % 4) / 100);
     const currentPrice = basePrice;
 
     return {
@@ -112,11 +144,14 @@ export class MarketDataService {
       previousClose,
       change: currentPrice - previousClose,
       changePercent: ((currentPrice - previousClose) / previousClose) * 100,
-      volume: Math.floor(1000000 + Math.random() * 9000000),
+      volume: Math.floor(1000000 + (seed % 9000000)),
       timestamp: new Date()
     };
   }
 
+  /**
+   * Generate simulated historical data
+   */
   private getSimulatedHistoricalData(days: number): number[] {
     const prices: number[] = [];
     let price = 100 + Math.random() * 400;
@@ -127,5 +162,17 @@ export class MarketDataService {
     }
     
     return prices;
+  }
+
+  /**
+   * Simple hash function for consistent pseudo-random values
+   */
+  private hashSymbol(symbol: string): number {
+    let hash = 0;
+    for (let i = 0; i < symbol.length; i++) {
+      hash = ((hash << 5) - hash) + symbol.charCodeAt(i);
+      hash = hash & hash;
+    }
+    return Math.abs(hash);
   }
 }

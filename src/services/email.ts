@@ -62,6 +62,7 @@ export class EmailService {
         <table role="presentation" style="max-width: 700px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
           
           ${this.generateHeader(report)}
+          ${this.generateDataSourceWarnings(report)}
           ${report.fearGreedFailed ? this.generateFearGreedWarning() : ''}
           ${this.generateMarketOverview(report)}
           ${this.generateAllocationsSection(report)}
@@ -75,6 +76,39 @@ export class EmailService {
   </table>
 </body>
 </html>
+    `;
+  }
+
+  /**
+   * Generate data source fallback warnings
+   */
+  private generateDataSourceWarnings(report: AllocationReport): string {
+    const warnings: string[] = [];
+    
+    if (report.dataSourceStatus) {
+      if (report.dataSourceStatus.marketDataSource === 'axios-fallback') {
+        warnings.push('Market data fetched via axios fallback (yahoo-finance2 library failed)');
+      }
+      if (report.dataSourceStatus.indicatorSource === 'custom-fallback') {
+        warnings.push('Technical indicators calculated via custom fallback (technicalindicators library failed)');
+      }
+    }
+
+    if (warnings.length === 0) {
+      return '';
+    }
+
+    return `
+          <tr>
+            <td style="padding: 0;">
+              <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px 40px; margin: 0;">
+                <p style="margin: 0; color: #92400e; font-size: 14px; font-weight: 600;">
+                  ⚠️ Data Source Fallback Active
+                </p>
+                ${warnings.map(w => `<p style="margin: 8px 0 0; color: #b45309; font-size: 13px;">• ${w}</p>`).join('')}
+              </div>
+            </td>
+          </tr>
     `;
   }
 

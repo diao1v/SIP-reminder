@@ -87,6 +87,9 @@ export interface AllocationReport {
   allocations: PortfolioAllocation[];
   recommendations: string[];
   technicalData?: TechnicalDataRow[];
+  
+  // Data source tracking
+  dataSourceStatus?: DataSourceStatus;
 }
 
 export interface TechnicalDataRow {
@@ -136,4 +139,27 @@ export interface FearGreedResponse {
   rating: string;       // "Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed"
   timestamp: Date;
   success: boolean;
+}
+
+/**
+ * Data source status tracking
+ * Shows which data sources were used (primary library or fallback)
+ */
+export interface DataSourceStatus {
+  marketDataSource: 'yahoo-finance2' | 'axios-fallback';
+  indicatorSource: 'technicalindicators' | 'custom-fallback';
+}
+
+/**
+ * Extended market data with source tracking
+ */
+export interface MarketDataWithSource extends MarketData {
+  dataSource: 'yahoo-finance2' | 'axios-fallback';
+}
+
+/**
+ * Extended technical indicators with source tracking
+ */
+export interface TechnicalIndicatorsWithSource extends TechnicalIndicators {
+  dataSource: 'technicalindicators' | 'custom-fallback';
 }

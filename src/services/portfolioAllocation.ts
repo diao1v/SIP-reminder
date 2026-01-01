@@ -8,7 +8,8 @@ import {
   AllocationReport, 
   Config,
   TechnicalDataRow,
-  FearGreedResponse
+  FearGreedResponse,
+  DataSourceStatus
 } from '../types';
 import { BASE_ALLOCATIONS, BUDGET_CONSTRAINTS } from '../utils/multiplierThresholds';
 
@@ -44,8 +45,15 @@ export class PortfolioAllocationEngine {
   async generateAllocation(config: Config): Promise<AllocationReport> {
     console.log('🔍 Fetching market data and analyzing (CSS v4.2)...');
 
+    // Track data sources
+    let marketDataSource: DataSourceStatus['marketDataSource'] = 'yahoo-finance2';
+    let indicatorSource: DataSourceStatus['indicatorSource'] = 'technicalindicators';
+
     // Fetch market-wide indicators
-    const vix = await this.marketDataService.fetchVIX();
+    const vixResult = await this.marketDataService.fetchVIX();
+    const vix = vixResult.vix;
+    marketDataSource = vixResult.source;
+
     const fearGreedResponse = await this.fearGreedService.fetchFearGreedIndex();
     const fearGreedIndex = fearGreedResponse.success ? fearGreedResponse.value : null;
 
@@ -62,6 +70,12 @@ export class PortfolioAllocationEngine {
     // Analyze each stock
     const analyses = await this.analyzeStocks(config.defaultStocks, vix, fearGreedIndex);
 
+    // Get indicator source from technical analysis service
+    indicatorSource = this.technicalAnalysisService.getLastDataSource();
+    
+    // Get final market data source (may have changed during stock analysis)
+    marketDataSource = this.marketDataService.getLastDataSource();
+
     // Calculate allocations using CSS
     const allocations = this.calculateAllocations(
       analyses,
@@ -73,13 +87,14 @@ export class PortfolioAllocationEngine {
     // Generate technical data for report
     const technicalData = this.generateTechnicalData(analyses);
 
-    // Generate recommendations
+    // Generate recommendations including data source warnings
     const recommendations = this.generateRecommendations(
       analyses,
       vix,
       fearGreedIndex,
       marketCondition,
-      fearGreedResponse
+      fearGreedResponse,
+      { marketDataSource, indicatorSource }
     );
 
     // Calculate actual total after CSS adjustments
@@ -98,7 +113,8 @@ export class PortfolioAllocationEngine {
       marketCondition,
       allocations,
       recommendations,
-      technicalData
+      technicalData,
+      dataSourceStatus: { marketDataSource, indicatorSource }
     };
   }
 
@@ -134,8 +150,8 @@ export class PortfolioAllocationEngine {
     fearGreedIndex: number | null
   ): Promise<StockAnalysis> {
     const marketData = await this.marketDataService.fetchStockData(symbol);
-    const historicalPrices = await this.marketDataService.fetchHistoricalData(symbol);
-    const technicalIndicators = this.technicalAnalysisService.calculateIndicators(historicalPrices);
+    const historicalResult = await this.marketDataService.fetchHistoricalData(symbol);
+    const technicalIndicators = this.technicalAnalysisService.calculateIndicators(historicalResult.prices);
     
     // Calculate CSS breakdown for this asset
     const cssBreakdown = this.cssService.calculateCSSBreakdown(
@@ -306,9 +322,18 @@ export class PortfolioAllocationEngine {
     vix: number,
     fearGreedIndex: number | null,
     marketCondition: string,
-    fearGreedResponse: FearGreedResponse
+    fearGreedResponse: FearGreedResponse,
+    dataSourceStatus: DataSourceStatus
   ): string[] {
     const recommendations: string[] = [];
+
+    // Data source warnings
+    if (dataSourceStatus.marketDataSource === 'axios-fallback') {
+      recommendations.push('⚠️ Market data: Using axios fallback (yahoo-finance2 failed)');
+    }
+    if (dataSourceStatus.indicatorSource === 'custom-fallback') {
+      recommendations.push('⚠️ Technical indicators: Using custom fallback (technicalindicators library failed)');
+    }
 
     // Fear & Greed failure warning
     if (!fearGreedResponse.success) {

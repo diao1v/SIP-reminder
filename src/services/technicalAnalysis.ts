@@ -31,15 +31,13 @@ export class TechnicalAnalysisService {
     avgGain /= period;
     avgLoss /= period;
 
-    // Smooth with remaining data
+    // Apply Wilder's smoothing method for remaining data
     for (let i = period; i < changes.length; i++) {
-      if (changes[i] > 0) {
-        avgGain = (avgGain * (period - 1) + changes[i]) / period;
-        avgLoss = (avgLoss * (period - 1)) / period;
-      } else {
-        avgGain = (avgGain * (period - 1)) / period;
-        avgLoss = (avgLoss * (period - 1) + Math.abs(changes[i])) / period;
-      }
+      const currentGain = changes[i] > 0 ? changes[i] : 0;
+      const currentLoss = changes[i] < 0 ? Math.abs(changes[i]) : 0;
+      
+      avgGain = ((avgGain * (period - 1)) + currentGain) / period;
+      avgLoss = ((avgLoss * (period - 1)) + currentLoss) / period;
     }
 
     if (avgLoss === 0) return 100;

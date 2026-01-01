@@ -8,11 +8,13 @@ export class EmailService {
     this.transporter = nodemailer.createTransport({
       host: config.smtp.host,
       port: config.smtp.port,
-      secure: false,
+      secure: config.smtp.port === 465, // Use TLS for port 465
       auth: {
         user: config.smtp.user,
         pass: config.smtp.pass
-      }
+      },
+      // Enable STARTTLS for port 587
+      requireTLS: config.smtp.port === 587
     });
   }
 

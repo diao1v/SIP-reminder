@@ -25,6 +25,11 @@ export class MarketDataService {
         }
       );
 
+      // Validate response structure
+      if (!response.data?.chart?.result?.[0]) {
+        throw new Error('Invalid response structure from API');
+      }
+
       const result = response.data.chart.result[0];
       const quote = result.meta;
       const currentPrice = quote.regularMarketPrice;
@@ -63,6 +68,11 @@ export class MarketDataService {
           }
         }
       );
+
+      // Validate response structure
+      if (!response.data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close) {
+        throw new Error('Invalid response structure from API');
+      }
 
       const result = response.data.chart.result[0];
       const closes = result.indicators.quote[0].close.filter((p: number | null) => p !== null);

@@ -13,6 +13,13 @@ export function loadConfig(): Config {
     console.warn('⚠️  Using default/test configuration. Please configure .env file for production use.');
   }
 
+  // Validate and normalize risk tolerance
+  const riskToleranceValue = (process.env.RISK_TOLERANCE || 'moderate').toLowerCase();
+  const validRiskLevels = ['conservative', 'moderate', 'aggressive'];
+  const riskTolerance = validRiskLevels.includes(riskToleranceValue) 
+    ? riskToleranceValue as 'conservative' | 'moderate' | 'aggressive'
+    : 'moderate';
+
   const config: Config = {
     smtp: {
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -23,7 +30,7 @@ export function loadConfig(): Config {
     emailTo: process.env.EMAIL_TO || 'recipient@example.com',
     weeklyInvestmentAmount: parseFloat(process.env.WEEKLY_INVESTMENT_AMOUNT || '1000'),
     defaultStocks: (process.env.DEFAULT_STOCKS || 'AAPL,MSFT,GOOGL,AMZN,SPY').split(',').map(s => s.trim()),
-    riskTolerance: (process.env.RISK_TOLERANCE || 'moderate') as 'conservative' | 'moderate' | 'aggressive'
+    riskTolerance
   };
 
   return config;

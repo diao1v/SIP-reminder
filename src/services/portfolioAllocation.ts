@@ -149,6 +149,17 @@ export class PortfolioAllocationEngine {
 
     // Normalize scores to percentages
     const totalScore = finalScores.reduce((a, b) => a + b, 0);
+    
+    // Guard against division by zero
+    if (totalScore <= 0) {
+      return [{
+        symbol: 'CASH',
+        amount: totalAmount,
+        percentage: 100,
+        reasoning: 'Unable to determine allocations with current market conditions. Holding cash.'
+      }];
+    }
+    
     const allocations: PortfolioAllocation[] = buyOpportunities.map((analysis, i) => {
       const percentage = (finalScores[i] / totalScore) * 100;
       const amount = Math.round((totalAmount * percentage) / 100);

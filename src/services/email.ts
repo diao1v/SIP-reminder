@@ -30,7 +30,7 @@ export class EmailService {
 
     try {
       await this.transporter.sendMail({
-        from: '"SIP Portfolio Advisor" <noreply@sip-reminder.com>',
+        from: '"SIP Portfolio Reminder Bot" <sip_reminder@mail.diaoev.com>',
         to: recipients,
         subject,
         html

@@ -38,6 +38,12 @@ export function loadConfig(): Config {
     console.warn('⚠️  Using default/test configuration. Please configure .env file for production use.');
   }
 
+  // Convex URL is optional - database features disabled if not set
+  const convexUrl = process.env.CONVEX_URL || '';
+  if (!convexUrl) {
+    console.warn('⚠️  CONVEX_URL not set - database features disabled');
+  }
+
   const riskTolerance = parseRiskTolerance(process.env.RISK_TOLERANCE);
   const stocks = parseStockList(process.env.DEFAULT_STOCKS);
   const emails = parseEmailList(process.env.EMAIL_TO);
@@ -57,7 +63,9 @@ export function loadConfig(): Config {
     cronSchedule: process.env.CRON_SCHEDULE || DEFAULT_CRON_SCHEDULE,
     // Budget constraints from strategy
     minBudget: BUDGET_CONSTRAINTS.MIN_BUDGET,
-    maxBudget: BUDGET_CONSTRAINTS.MAX_BUDGET
+    maxBudget: BUDGET_CONSTRAINTS.MAX_BUDGET,
+    // Convex database (optional)
+    convexUrl
   };
 
   return config;

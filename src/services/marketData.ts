@@ -87,12 +87,12 @@ export class MarketDataService {
   };
 
   // Track which source was used
-  private lastDataSource: 'yahoo-finance2' | 'axios-fallback' = 'yahoo-finance2';
+  private lastDataSource: 'yahoo-finance2' | 'axios-fallback' | 'simulated' = 'yahoo-finance2';
 
   /**
    * Get the last used data source
    */
-  getLastDataSource(): 'yahoo-finance2' | 'axios-fallback' {
+  getLastDataSource(): 'yahoo-finance2' | 'axios-fallback' | 'simulated' {
     return this.lastDataSource;
   }
 
@@ -187,7 +187,7 @@ export class MarketDataService {
    * @remarks
    * Fallback chain: yahoo-finance2 chart() → axios API → simulated data
    */
-  async fetchHistoricalData(symbol: string, days: number = HISTORY_DAYS): Promise<{ prices: number[]; source: 'yahoo-finance2' | 'axios-fallback' }> {
+  async fetchHistoricalData(symbol: string, days: number = HISTORY_DAYS): Promise<{ prices: number[]; source: 'yahoo-finance2' | 'axios-fallback' | 'simulated' }> {
     // Try yahoo-finance2 chart() method (replaces deprecated historical())
     try {
       const endDate = new Date();
@@ -228,7 +228,7 @@ export class MarketDataService {
   /**
    * Fallback: Direct axios API call for historical data
    */
-  private async fetchHistoricalDataAxios(symbol: string, days: number): Promise<{ prices: number[]; source: 'yahoo-finance2' | 'axios-fallback' }> {
+  private async fetchHistoricalDataAxios(symbol: string, days: number): Promise<{ prices: number[]; source: 'yahoo-finance2' | 'axios-fallback' | 'simulated' }> {
     try {
       const data = await this.fetchFromYahooAxios<YahooChartResponse>(symbol, {
         interval: '1d',
@@ -249,7 +249,9 @@ export class MarketDataService {
       return { prices, source: 'axios-fallback' };
     } catch (error) {
       console.error(`❌ Both sources failed for ${symbol} historical:`, error);
-      return { prices: this.getSimulatedHistoricalData(days), source: 'axios-fallback' };
+      console.warn(`🚨 ${symbol}: Using SIMULATED historical data - DO NOT USE FOR REAL INVESTMENTS`);
+      this.lastDataSource = 'simulated';
+      return { prices: this.getSimulatedHistoricalData(days), source: 'simulated' };
     }
   }
 
@@ -330,6 +332,7 @@ export class MarketDataService {
 
   /**
    * Simulated data for development/testing when API is unavailable
+   * WARNING: This returns FAKE data - clearly flagged as 'simulated'
    */
   private getSimulatedData(symbol: string): MarketDataWithSource {
     // Use consistent pseudo-random values based on symbol
@@ -338,7 +341,8 @@ export class MarketDataService {
     const previousClose = basePrice * (0.98 + (seed % 4) / 100);
     const currentPrice = basePrice;
 
-    console.warn(`⚠️ ${symbol}: Using simulated data (all sources failed)`);
+    this.lastDataSource = 'simulated';
+    console.warn(`🚨 ${symbol}: Using SIMULATED data (all API sources failed) - DO NOT USE FOR REAL INVESTMENTS`);
 
     return {
       symbol,
@@ -348,7 +352,7 @@ export class MarketDataService {
       changePercent: ((currentPrice - previousClose) / previousClose) * 100,
       volume: Math.floor(1000000 + (seed % 9000000)),
       timestamp: new Date(),
-      dataSource: 'axios-fallback'
+      dataSource: 'simulated'
     };
   }
 

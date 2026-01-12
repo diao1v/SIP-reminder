@@ -41,13 +41,9 @@ const createMockIndicators = (overrides: Partial<TechnicalIndicators> = {}): Tec
   ma20: 100,
   ma50: 100,
   atr: 2,
-  bbUpper: 110,
-  bbLower: 90,
   bbWidth: 20,
-  isGoodEntry: false,
-  entryThreshold: 95,
-  ma50Deviation: 0,
   ma50Slope: 0,
+  bollingerBands: { upper: 110, middle: 100, lower: 90 },
   ...overrides,
 });
 
@@ -57,28 +53,39 @@ const createMockCSSBreakdown = (overrides: Partial<CSSBreakdown> = {}): CSSBreak
   rsiScore: 50,
   bbWidthScore: 50,
   ma50Score: 50,
+  ma50ScoreAdjusted: 50,
   fearGreedScore: 50,
+  vixValue: 20,
+  rsiValue: 50,
+  bbWidthValue: 10,
+  ma50DeviationPercent: 0,
+  ma50Slope: 0,
+  ma50SlopeBonus: 0,
+  fearGreedValue: 50,
   totalCSS: 50,
   multiplier: 1.0,
-  ma50DeviationPercent: 0,
-  ma50SlopeBonus: 0,
+  fearGreedFailed: false,
   weightsAdjusted: false,
   ...overrides,
 });
 
 // Helper to create a mock config
 const createMockConfig = (overrides: Partial<Config> = {}): Config => ({
+  smtp: {
+    host: 'smtp.test.com',
+    port: 587,
+    user: 'test@test.com',
+    pass: 'testpassword',
+  },
+  emailTo: ['test@test.com'],
   weeklyInvestmentAmount: 1750,
   defaultStocks: ['VOO', 'QQQ', 'SCHD'],
+  riskTolerance: 'moderate',
+  port: 3000,
+  cronSchedule: '0 9 * * 1',
+  timezone: 'Pacific/Auckland',
   minBudget: 875,
   maxBudget: 2100,
-  enableEmail: false,
-  smtpHost: 'smtp.test.com',
-  smtpPort: 587,
-  smtpUser: 'test@test.com',
-  smtpPassword: 'test',
-  emailFrom: 'test@test.com',
-  emailTo: 'test@test.com',
   convexUrl: '',
   ...overrides,
 });
@@ -128,13 +135,17 @@ describe('PortfolioAllocationEngine', () => {
         change: 1.5,
         changePercent: 0.38,
         volume: 5000000,
+        dataSource: 'yahoo-finance2',
       });
       mockMarketData.fetchHistoricalData.mockResolvedValue({
         symbol: 'VOO',
         prices: Array(100).fill(400),
         source: 'yahoo-finance2',
       });
-      mockTechnical.calculateIndicators.mockReturnValue(createMockIndicators());
+      mockTechnical.calculateIndicators.mockReturnValue({
+        ...createMockIndicators(),
+        dataSource: 'technicalindicators',
+      });
       mockTechnical.analyzeSignal.mockReturnValue({ signal: 'HOLD', strength: 50 });
       mockCSS.calculateCSSBreakdown.mockReturnValue(createMockCSSBreakdown());
     });
@@ -207,14 +218,27 @@ describe('PortfolioAllocationEngine', () => {
     });
 
     it('should track data source status', async () => {
-      mockMarketData.getLastDataSource.mockReturnValue('axios-fallback');
-      mockTechnical.getLastDataSource.mockReturnValue('custom-fallback');
+      // Mock market data to return axios-fallback source
+      mockMarketData.fetchStockData.mockResolvedValue({
+        symbol: 'VOO',
+        price: 400,
+        change: 1.5,
+        changePercent: 0.38,
+        volume: 5000000,
+        dataSource: 'axios-fallback',
+      });
+      // Mock technical indicators to return custom-fallback source
+      mockTechnical.calculateIndicators.mockReturnValue({
+        ...createMockIndicators(),
+        dataSource: 'custom-fallback',
+      });
 
       const config = createMockConfig({ defaultStocks: ['VOO'] });
       const report = await engine.generateAllocation(config);
 
-      expect(report.dataSourceStatus.marketDataSource).toBe('axios-fallback');
-      expect(report.dataSourceStatus.indicatorSource).toBe('custom-fallback');
+      expect(report.dataSourceStatus).toBeDefined();
+      expect(report.dataSourceStatus!.marketDataSource).toBe('axios-fallback');
+      expect(report.dataSourceStatus!.indicatorSource).toBe('custom-fallback');
     });
 
     it('should continue when a stock analysis fails', async () => {
@@ -371,20 +395,36 @@ describe('PortfolioAllocationEngine', () => {
         change: 1,
         changePercent: 0.25,
         volume: 1000000,
+        dataSource: 'yahoo-finance2',
       });
       mockMarketData.fetchHistoricalData.mockResolvedValue({
         symbol: 'VOO',
         prices: Array(100).fill(400),
         source: 'yahoo-finance2',
       });
-      mockTechnical.calculateIndicators.mockReturnValue(createMockIndicators());
+      mockTechnical.calculateIndicators.mockReturnValue({
+        ...createMockIndicators(),
+        dataSource: 'technicalindicators',
+      });
       mockTechnical.analyzeSignal.mockReturnValue({ signal: 'HOLD', strength: 50 });
       mockCSS.calculateCSSBreakdown.mockReturnValue(createMockCSSBreakdown());
     });
 
     it('should warn about fallback data sources', async () => {
-      mockMarketData.getLastDataSource.mockReturnValue('axios-fallback');
-      mockTechnical.getLastDataSource.mockReturnValue('custom-fallback');
+      // Mock market data to return axios-fallback source
+      mockMarketData.fetchStockData.mockResolvedValue({
+        symbol: 'VOO',
+        price: 400,
+        change: 1.5,
+        changePercent: 0.38,
+        volume: 5000000,
+        dataSource: 'axios-fallback',
+      });
+      // Mock technical indicators to return custom-fallback source
+      mockTechnical.calculateIndicators.mockReturnValue({
+        ...createMockIndicators(),
+        dataSource: 'custom-fallback',
+      });
 
       const config = createMockConfig({ defaultStocks: ['VOO'] });
       const report = await engine.generateAllocation(config);
@@ -501,8 +541,9 @@ describe('PortfolioAllocationEngine', () => {
       const config = createMockConfig({ defaultStocks: ['VOO'] });
       const report = await engine.generateAllocation(config);
 
+      expect(report.technicalData).toBeDefined();
       expect(report.technicalData).toHaveLength(1);
-      const tech = report.technicalData[0];
+      const tech = report.technicalData![0];
       expect(tech.symbol).toBe('VOO');
       expect(tech.price).toBe(400.12); // Rounded to 2 decimal places
       expect(tech.rsi).toBe(45.68);

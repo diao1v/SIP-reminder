@@ -366,6 +366,7 @@ describe('CSSService', () => {
       atr: 5,
       bbWidth: 8,
       ma50Slope: 0.005, // Moderate uptrend
+      bollingerBands: { upper: 108, middle: 100, lower: 92 },
     };
 
     it('should calculate complete CSS breakdown with all indicators', () => {

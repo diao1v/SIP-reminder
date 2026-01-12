@@ -342,6 +342,7 @@ describe('TechnicalAnalysisService', () => {
       ma50Slope: 0,
       atr: 5,
       bbWidth: 5,
+      bollingerBands: { upper: 105, middle: 100, lower: 95 },
     };
 
     it('should return BUY or HOLD signal (never SELL)', () => {
@@ -410,6 +411,7 @@ describe('TechnicalAnalysisService', () => {
         ma50Slope: 0.02,
         atr: 20,
         bbWidth: 20,
+        bollingerBands: { upper: 140, middle: 120, lower: 100 },
       };
       const { strength: bullishStrength } = service.analyzeSignal(bullishIndicators, 90);
       expect(bullishStrength).toBeLessThanOrEqual(100);
@@ -422,6 +424,7 @@ describe('TechnicalAnalysisService', () => {
         ma50Slope: -0.02,
         atr: 2,
         bbWidth: 2,
+        bollingerBands: { upper: 82, middle: 80, lower: 78 },
       };
       const { strength: bearishStrength } = service.analyzeSignal(bearishIndicators, 100);
       expect(bearishStrength).toBeGreaterThanOrEqual(0);
@@ -436,6 +439,7 @@ describe('TechnicalAnalysisService', () => {
         ma50Slope: 0.01,
         atr: 5,
         bbWidth: 12,
+        bollingerBands: { upper: 112, middle: 100, lower: 88 },
       };
       const { signal, strength } = service.analyzeSignal(bullishIndicators, 100);
       if (strength >= 50) {
@@ -452,6 +456,7 @@ describe('TechnicalAnalysisService', () => {
         ma50Slope: -0.01,
         atr: 2,
         bbWidth: 2,
+        bollingerBands: { upper: 102, middle: 100, lower: 98 },
       };
       const { signal, strength } = service.analyzeSignal(bearishIndicators, 100);
       if (strength < 50) {
@@ -498,12 +503,18 @@ describe('TechnicalAnalysisService', () => {
   // ===========================================================================
   // Data Source Tracking
   // ===========================================================================
-  describe('getLastDataSource', () => {
-    it('should track data source after calculations', () => {
+  describe('calculateIndicators dataSource tracking', () => {
+    it('should include dataSource in calculateIndicators result', () => {
       const prices = generatePrices(50, 100, 'flat');
-      service.calculateRSI(prices);
-      const source = service.getLastDataSource();
-      expect(['technicalindicators', 'custom-fallback']).toContain(source);
+      const result = service.calculateIndicators(prices);
+      expect(['technicalindicators', 'custom-fallback']).toContain(result.dataSource);
+    });
+
+    it('should report technicalindicators when library succeeds', () => {
+      const prices = generatePrices(50, 100, 'flat');
+      const result = service.calculateIndicators(prices);
+      // With valid data, library should succeed
+      expect(result.dataSource).toBe('technicalindicators');
     });
   });
 

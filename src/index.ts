@@ -163,10 +163,10 @@ serve({
     cron.schedule(cronSchedule, () => {
       runScheduledAnalysis();
     }, {
-      timezone: 'Pacific/Auckland'  // NZST timezone
+      timezone: config.timezone
     });
-    
-    console.log('   Timezone: Pacific/Auckland (NZST)');
+
+    console.log(`   Timezone: ${config.timezone}`);
   } else {
     console.log(`⚠️ Invalid cron schedule: ${cronSchedule}`);
     console.log('   Cron scheduler disabled');

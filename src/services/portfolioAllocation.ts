@@ -70,11 +70,16 @@ export class PortfolioAllocationEngine {
     // Analyze each stock
     const analyses = await this.analyzeStocks(config.defaultStocks, vix, fearGreedIndex);
 
-    // Get indicator source from technical analysis service
-    indicatorSource = this.technicalAnalysisService.getLastDataSource();
-    
-    // Get final market data source (may have changed during stock analysis)
-    marketDataSource = this.marketDataService.getLastDataSource();
+    // Derive data sources from analyses (avoids race conditions from shared state)
+    // Report fallback/simulated if ANY stock used fallback
+    indicatorSource = analyses.some(a => a.technicalIndicators.dataSource === 'custom-fallback')
+      ? 'custom-fallback'
+      : 'technicalindicators';
+    marketDataSource = analyses.some(a => a.marketData.dataSource === 'simulated')
+      ? 'simulated'
+      : analyses.some(a => a.marketData.dataSource === 'axios-fallback')
+        ? 'axios-fallback'
+        : 'yahoo-finance2';
 
     // Calculate allocations using CSS
     const allocations = this.calculateAllocations(

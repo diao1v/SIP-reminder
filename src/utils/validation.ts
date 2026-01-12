@@ -92,7 +92,13 @@ export const snapshotParamSchema = z.object({
 export type SnapshotParam = z.infer<typeof snapshotParamSchema>;
 
 /**
+ * Maximum years in the past for date range queries
+ */
+const MAX_YEARS_BACK = 5;
+
+/**
  * GET /api/history/range query params schema
+ * Limits queries to the last 5 years and prevents future dates
  */
 export const dateRangeQuerySchema = z.object({
   start: z
@@ -101,6 +107,19 @@ export const dateRangeQuerySchema = z.object({
     .refine(
       (val) => !isNaN(Date.parse(val)),
       'Start date must be a valid ISO date string'
+    )
+    .refine(
+      (val) => {
+        const date = new Date(val);
+        const minDate = new Date();
+        minDate.setFullYear(minDate.getFullYear() - MAX_YEARS_BACK);
+        return date >= minDate;
+      },
+      `Start date cannot be more than ${MAX_YEARS_BACK} years in the past`
+    )
+    .refine(
+      (val) => new Date(val) <= new Date(),
+      'Start date cannot be in the future'
     ),
   end: z
     .string()
@@ -108,6 +127,10 @@ export const dateRangeQuerySchema = z.object({
     .refine(
       (val) => !isNaN(Date.parse(val)),
       'End date must be a valid ISO date string'
+    )
+    .refine(
+      (val) => new Date(val) <= new Date(),
+      'End date cannot be in the future'
     ),
 }).refine(
   (data) => new Date(data.start) <= new Date(data.end),

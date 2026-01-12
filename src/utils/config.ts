@@ -33,6 +33,7 @@ dotenv.config();
 const DEFAULT_STOCKS = ['QQQ', 'GOOG', 'AIQ', 'TSLA', 'XLV', 'VXUS', 'TLT'];
 const DEFAULT_PORT = 3003;
 const DEFAULT_CRON_SCHEDULE = '0 20 * * 3'; // Wednesday at 8pm
+const DEFAULT_TIMEZONE = 'Pacific/Auckland'; // NZST timezone
 
 // ============================================================================
 // Zod Schema for Environment Variables
@@ -73,6 +74,7 @@ const envSchema = z.object({
     .default(String(DEFAULT_PORT))
     .transform(Number),
   CRON_SCHEDULE: z.string().optional().default(DEFAULT_CRON_SCHEDULE),
+  TIMEZONE: z.string().optional().default(DEFAULT_TIMEZONE),
 
   // Database Configuration (optional)
   CONVEX_URL: z.string().optional().default(''),
@@ -122,6 +124,7 @@ function loadAndValidateConfig(): Config {
     riskTolerance: env.RISK_TOLERANCE,
     port: env.PORT,
     cronSchedule: env.CRON_SCHEDULE,
+    timezone: env.TIMEZONE,
     minBudget: BUDGET_CONSTRAINTS.MIN_BUDGET,
     maxBudget: BUDGET_CONSTRAINTS.MAX_BUDGET,
     convexUrl: env.CONVEX_URL,

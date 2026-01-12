@@ -2,21 +2,24 @@ import { RSI, BollingerBands, ATR, SMA } from 'technicalindicators';
 import { TechnicalIndicators, TechnicalIndicatorsWithSource } from '../types';
 
 /**
+ * Result type for internal calculations with source tracking
+ */
+type CalculationResult<T> = {
+  value: T;
+  source: 'technicalindicators' | 'custom-fallback';
+};
+
+/**
  * Technical Analysis Service
- * 
+ *
  * Uses technicalindicators library as primary calculation engine with
  * custom implementations as fallback for resilience.
+ *
+ * ## Thread Safety
+ * All calculation methods are stateless and return source information
+ * directly, avoiding race conditions from shared state.
  */
 export class TechnicalAnalysisService {
-  // Track which source was used
-  private lastDataSource: 'technicalindicators' | 'custom-fallback' = 'technicalindicators';
-
-  /**
-   * Get the last used data source
-   */
-  getLastDataSource(): 'technicalindicators' | 'custom-fallback' {
-    return this.lastDataSource;
-  }
 
   /**
    * Calculate Relative Strength Index (RSI)
@@ -24,6 +27,13 @@ export class TechnicalAnalysisService {
    * Fallback: Custom implementation
    */
   calculateRSI(prices: number[], period: number = 14): number {
+    return this.calculateRSIWithSource(prices, period).value;
+  }
+
+  /**
+   * Calculate RSI with source tracking (stateless)
+   */
+  private calculateRSIWithSource(prices: number[], period: number = 14): CalculationResult<number> {
     // Try technicalindicators library first
     try {
       const rsiResult = RSI.calculate({
@@ -34,15 +44,13 @@ export class TechnicalAnalysisService {
       if (rsiResult && rsiResult.length > 0) {
         const latestRSI = rsiResult[rsiResult.length - 1];
         if (typeof latestRSI === 'number' && !isNaN(latestRSI)) {
-          this.lastDataSource = 'technicalindicators';
-          return Math.round(latestRSI * 100) / 100;
+          return { value: Math.round(latestRSI * 100) / 100, source: 'technicalindicators' };
         }
       }
       throw new Error('Invalid RSI result from library');
     } catch {
       console.warn(`⚠️ technicalindicators RSI failed, using custom fallback`);
-      this.lastDataSource = 'custom-fallback';
-      return this.calculateRSICustom(prices, period);
+      return { value: this.calculateRSICustom(prices, period), source: 'custom-fallback' };
     }
   }
 
@@ -96,6 +104,13 @@ export class TechnicalAnalysisService {
    * Fallback: Custom implementation
    */
   calculateSMA(prices: number[], period: number): number {
+    return this.calculateSMAWithSource(prices, period).value;
+  }
+
+  /**
+   * Calculate SMA with source tracking (stateless)
+   */
+  private calculateSMAWithSource(prices: number[], period: number): CalculationResult<number> {
     // Try technicalindicators library first
     try {
       const smaResult = SMA.calculate({
@@ -106,14 +121,12 @@ export class TechnicalAnalysisService {
       if (smaResult && smaResult.length > 0) {
         const latestSMA = smaResult[smaResult.length - 1];
         if (typeof latestSMA === 'number' && !isNaN(latestSMA)) {
-          this.lastDataSource = 'technicalindicators';
-          return Math.round(latestSMA * 100) / 100;
+          return { value: Math.round(latestSMA * 100) / 100, source: 'technicalindicators' };
         }
       }
       throw new Error('Invalid SMA result from library');
     } catch {
-      this.lastDataSource = 'custom-fallback';
-      return this.calculateSMACustom(prices, period);
+      return { value: this.calculateSMACustom(prices, period), source: 'custom-fallback' };
     }
   }
 
@@ -191,6 +204,17 @@ export class TechnicalAnalysisService {
     period: number = 20,
     stdDev: number = 2
   ): { upper: number; middle: number; lower: number } {
+    return this.calculateBollingerBandsWithSource(prices, period, stdDev).value;
+  }
+
+  /**
+   * Calculate Bollinger Bands with source tracking (stateless)
+   */
+  private calculateBollingerBandsWithSource(
+    prices: number[],
+    period: number = 20,
+    stdDev: number = 2
+  ): CalculationResult<{ upper: number; middle: number; lower: number }> {
     // Try technicalindicators library first
     try {
       const bbResult = BollingerBands.calculate({
@@ -202,19 +226,23 @@ export class TechnicalAnalysisService {
       if (bbResult && bbResult.length > 0) {
         const latestBB = bbResult[bbResult.length - 1];
         if (latestBB && typeof latestBB.upper === 'number' && typeof latestBB.middle === 'number' && typeof latestBB.lower === 'number') {
-          this.lastDataSource = 'technicalindicators';
           return {
-            upper: Math.round(latestBB.upper * 100) / 100,
-            middle: Math.round(latestBB.middle * 100) / 100,
-            lower: Math.round(latestBB.lower * 100) / 100
+            value: {
+              upper: Math.round(latestBB.upper * 100) / 100,
+              middle: Math.round(latestBB.middle * 100) / 100,
+              lower: Math.round(latestBB.lower * 100) / 100
+            },
+            source: 'technicalindicators'
           };
         }
       }
       throw new Error('Invalid Bollinger Bands result from library');
     } catch {
       console.warn(`⚠️ technicalindicators Bollinger Bands failed, using custom fallback`);
-      this.lastDataSource = 'custom-fallback';
-      return this.calculateBollingerBandsCustom(prices, period, stdDev);
+      return {
+        value: this.calculateBollingerBandsCustom(prices, period, stdDev),
+        source: 'custom-fallback'
+      };
     }
   }
 
@@ -266,6 +294,13 @@ export class TechnicalAnalysisService {
    * Note: Library requires high/low/close arrays; we approximate from close prices
    */
   calculateATR(prices: number[], period: number = 14): number {
+    return this.calculateATRWithSource(prices, period).value;
+  }
+
+  /**
+   * Calculate ATR with source tracking (stateless)
+   */
+  private calculateATRWithSource(prices: number[], period: number = 14): CalculationResult<number> {
     // Try technicalindicators library first
     try {
       // Convert close prices to high/low/close approximation
@@ -291,15 +326,13 @@ export class TechnicalAnalysisService {
       if (atrResult && atrResult.length > 0) {
         const latestATR = atrResult[atrResult.length - 1];
         if (typeof latestATR === 'number' && !isNaN(latestATR)) {
-          this.lastDataSource = 'technicalindicators';
-          return Math.round(latestATR * 100) / 100;
+          return { value: Math.round(latestATR * 100) / 100, source: 'technicalindicators' };
         }
       }
       throw new Error('Invalid ATR result from library');
     } catch {
       console.warn(`⚠️ technicalindicators ATR failed, using custom fallback`);
-      this.lastDataSource = 'custom-fallback';
-      return this.calculateATRCustom(prices, period);
+      return { value: this.calculateATRCustom(prices, period), source: 'custom-fallback' };
     }
   }
 
@@ -364,22 +397,27 @@ export class TechnicalAnalysisService {
    * Returns indicators with source tracking
    */
   calculateIndicators(prices: number[]): TechnicalIndicatorsWithSource {
-    const bollingerBands = this.calculateBollingerBands(prices);
-    const ma20 = this.calculateMA20(prices);
-    const ma50 = this.calculateMA50(prices);
-    const ma50Slope = this.calculateMA50Slope(prices); // v4.3
-    const atr = this.calculateATR(prices);
-    const rsi = this.calculateRSI(prices);
+    // Use source-tracking methods to avoid race conditions
+    const bbResult = this.calculateBollingerBandsWithSource(prices);
+    const ma20Result = this.calculateSMAWithSource(prices, 20);
+    const ma50Result = this.calculateSMAWithSource(prices, 50);
+    const ma50Slope = this.calculateMA50Slope(prices); // v4.3 (uses SMA internally)
+    const atrResult = this.calculateATRWithSource(prices);
+    const rsiResult = this.calculateRSIWithSource(prices);
+
+    // Report 'custom-fallback' if ANY calculation used fallback
+    const usedFallback = [bbResult, ma20Result, ma50Result, atrResult, rsiResult]
+      .some(r => r.source === 'custom-fallback');
 
     return {
-      rsi,
-      bollingerBands,
-      bbWidth: this.calculateBBWidth(bollingerBands),
-      atr,
-      ma20,
-      ma50,
+      rsi: rsiResult.value,
+      bollingerBands: bbResult.value,
+      bbWidth: this.calculateBBWidth(bbResult.value),
+      atr: atrResult.value,
+      ma20: ma20Result.value,
+      ma50: ma50Result.value,
       ma50Slope,
-      dataSource: this.lastDataSource
+      dataSource: usedFallback ? 'custom-fallback' : 'technicalindicators'
     };
   }
 

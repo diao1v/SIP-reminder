@@ -84,9 +84,26 @@ RISK_TOLERANCE=moderate
 # Server Configuration (Optional)
 PORT=3002
 CRON_SCHEDULE=0 20 * * 3
+
+# Database Configuration (Optional - for historical data)
+CONVEX_URL=https://your-convex-deployment.convex.cloud
 ```
 
 **For Gmail**: Generate an [App Password](https://support.google.com/accounts/answer/185833) instead of using your regular password.
+
+### Database Setup (Optional)
+
+To enable historical data tracking with Convex:
+
+```bash
+# Initialize Convex (follow prompts to create account/project)
+pnpm exec convex dev
+
+# This will generate the API files and deploy your schema
+# Copy the deployment URL to CONVEX_URL in your .env
+```
+
+The database stores weekly analysis snapshots for strategy review and backtesting.
 
 ### Build and Run
 
@@ -111,6 +128,12 @@ Once running, the server exposes:
 | `/health` | GET | Health check for monitoring |
 | `/api/analyze` | GET | Get latest analysis without email |
 | `/api/analyze` | POST | Trigger analysis with options |
+| `/api/history` | GET | Get recent analysis snapshots |
+| `/api/history/latest` | GET | Get most recent snapshot with stocks |
+| `/api/history/stats` | GET | Get summary statistics |
+| `/api/history/stock/:symbol` | GET | Get history for specific stock |
+| `/api/history/snapshot/:id` | GET | Get specific snapshot by ID |
+| `/api/history/range` | GET | Get snapshots by date range |
 
 ### POST /api/analyze
 
@@ -118,8 +141,15 @@ Once running, the server exposes:
 {
   "investmentAmount": 300,
   "stocks": ["QQQ", "GOOG", "TSLA"],
-  "sendEmail": true
+  "sendEmail": true,
+  "saveToDatabase": true
 }
+```
+
+### GET /api/history/range
+
+```
+GET /api/history/range?start=2025-01-01T00:00:00.000Z&end=2025-12-31T23:59:59.999Z
 ```
 
 ## 📊 Example Output
@@ -162,8 +192,11 @@ Configuration:
 - **Hono**: Fast, lightweight web framework
 - **Node.js/TypeScript**: Core application
 - **Axios**: HTTP client for market data
+- **yahoo-finance2**: Financial data library (with fallback)
+- **technicalindicators**: Technical analysis library (with fallback)
 - **Nodemailer**: Email delivery
 - **node-cron**: Scheduled execution
+- **Convex**: Real-time database for historical data (optional)
 - **dotenv**: Environment configuration
 
 ## ⚙️ Advanced Configuration

@@ -120,6 +120,7 @@ export interface Config {
   cronSchedule: string;
   minBudget: number;              // Minimum weekly budget ($125)
   maxBudget: number;              // Maximum weekly budget ($300)
+  convexUrl: string;              // Convex database URL (optional)
 }
 
 /**
@@ -162,4 +163,22 @@ export interface MarketDataWithSource extends MarketData {
  */
 export interface TechnicalIndicatorsWithSource extends TechnicalIndicators {
   dataSource: 'technicalindicators' | 'custom-fallback';
+}
+
+/**
+ * Database save result
+ */
+export interface DatabaseSaveResult {
+  success: boolean;
+  snapshotId?: string;
+  stockAnalysesCount?: number;
+  error?: string;
+}
+
+/**
+ * Extended AllocationReport with optional database tracking
+ */
+export interface AllocationReportWithDb extends AllocationReport {
+  snapshotId?: string;
+  savedToDatabase?: boolean;
 }

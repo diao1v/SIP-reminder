@@ -1,15 +1,27 @@
 import { Hono } from 'hono';
 import { PortfolioAllocationEngine } from '../services/portfolioAllocation';
 import { EmailService } from '../services/email';
+import { DatabaseService } from '../services/database';
 import { loadConfig } from '../utils/config';
-import { AllocationReport, Config } from '../types';
+import { AllocationReport, Config, DatabaseSaveResult } from '../types';
 
 const analyzeRouter = new Hono();
+
+// Database service singleton
+let dbService: DatabaseService | null = null;
+
+function getDbService(convexUrl: string): DatabaseService {
+  if (!dbService) {
+    dbService = new DatabaseService(convexUrl);
+  }
+  return dbService;
+}
 
 interface AnalyzeRequestBody {
   investmentAmount?: number;
   stocks?: string[];
   sendEmail?: boolean;
+  saveToDatabase?: boolean;
 }
 
 /**
@@ -25,7 +37,8 @@ analyzeRouter.get('/', async (c) => {
     return c.json({
       success: true,
       report: formatReportForResponse(report),
-      emailSent: false
+      emailSent: false,
+      savedToDatabase: false
     });
   } catch (error) {
     console.error('Analysis error:', error);
@@ -54,12 +67,15 @@ analyzeRouter.post('/', async (c) => {
     };
 
     const shouldSendEmail = body.sendEmail ?? true;
+    const shouldSaveToDatabase = body.saveToDatabase ?? true;
 
     const engine = new PortfolioAllocationEngine();
     const report = await engine.generateAllocation(config);
 
     let emailSent = false;
+    let dbResult: DatabaseSaveResult = { success: false };
 
+    // Send email if requested
     if (shouldSendEmail && config.emailTo.length > 0) {
       try {
         const emailService = new EmailService(config);
@@ -75,10 +91,28 @@ analyzeRouter.post('/', async (c) => {
       }
     }
 
+    // Save to database if requested and configured
+    if (shouldSaveToDatabase && config.convexUrl) {
+      try {
+        const db = getDbService(config.convexUrl);
+        dbResult = await db.saveAnalysisReport(report);
+      } catch (dbError) {
+        console.error('Database save failed:', dbError);
+        dbResult = { 
+          success: false, 
+          error: dbError instanceof Error ? dbError.message : 'Unknown error' 
+        };
+        // Continue without failing the whole request
+      }
+    }
+
     return c.json({
       success: true,
       report: formatReportForResponse(report),
-      emailSent
+      emailSent,
+      savedToDatabase: dbResult.success,
+      snapshotId: dbResult.snapshotId,
+      databaseError: dbResult.success ? undefined : dbResult.error
     });
   } catch (error) {
     console.error('Analysis error:', error);

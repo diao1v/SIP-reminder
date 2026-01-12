@@ -4,7 +4,9 @@ import { MarketDataWithSource } from '../types';
 import { HISTORY_DAYS } from '../utils/multiplierThresholds';
 
 // Initialize yahoo-finance2 client
-const yahooFinance = new YahooFinance();
+const yahooFinance = new YahooFinance({
+  suppressNotices: ['yahooSurvey']  // Suppress non-critical survey notices
+});
 
 /**
  * Type definition for yahoo-finance2 quote result
@@ -19,16 +21,25 @@ interface YahooQuoteResult {
 }
 
 /**
- * Type definition for yahoo-finance2 historical result
+ * Type definition for yahoo-finance2 chart result
  */
-interface YahooHistoricalRow {
+interface YahooChartQuote {
   date: Date;
   open: number;
   high: number;
   low: number;
   close: number;
   volume: number;
-  adjClose?: number;
+  adjclose?: number;
+}
+
+interface YahooChartResult {
+  meta: {
+    regularMarketPrice: number;
+    previousClose?: number;
+    chartPreviousClose?: number;
+  };
+  quotes: YahooChartQuote[];
 }
 
 interface YahooChartResponse {
@@ -151,39 +162,41 @@ export class MarketDataService {
 
   /**
    * Fetches historical price data for technical analysis
-   * Primary: yahoo-finance2 library
+   * Primary: yahoo-finance2 chart() method
    * Fallback: Direct axios API call
-   * Default 100 days for MA50 calculation (CSS v4.2)
+   * Default 150 days for MA50 slope calculation (CSS v4.3)
    */
   async fetchHistoricalData(symbol: string, days: number = HISTORY_DAYS): Promise<{ prices: number[]; source: 'yahoo-finance2' | 'axios-fallback' }> {
-    // Try yahoo-finance2 first
+    // Try yahoo-finance2 chart() method (replaces deprecated historical())
     try {
       const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
-      const result = await yahooFinance.historical(symbol, {
+      const result = await yahooFinance.chart(symbol, {
         period1: startDate,
         period2: endDate,
         interval: '1d'
-      }) as YahooHistoricalRow[];
+      }) as YahooChartResult;
 
-      if (!result || result.length === 0) {
-        throw new Error('No historical data returned from yahoo-finance2');
+      if (!result || !result.quotes || result.quotes.length === 0) {
+        throw new Error('No chart data returned from yahoo-finance2');
       }
 
-      const prices = result.map((row: YahooHistoricalRow) => row.close).filter((p): p is number => p !== null && p !== undefined);
-      
+      const prices = result.quotes
+        .map((quote: YahooChartQuote) => quote.close)
+        .filter((p): p is number => p !== null && p !== undefined);
+
       if (prices.length < 10) {
         throw new Error(`Insufficient historical data: only ${prices.length} points`);
       }
 
       this.lastDataSource = 'yahoo-finance2';
-      console.log(`✅ ${symbol}: Historical data via yahoo-finance2 (${prices.length} days)`);
+      console.log(`✅ ${symbol}: Historical data via yahoo-finance2 chart() (${prices.length} days)`);
 
       return { prices, source: 'yahoo-finance2' };
     } catch (libraryError) {
-      console.warn(`⚠️ yahoo-finance2 historical failed for ${symbol}:`, libraryError instanceof Error ? libraryError.message : libraryError);
+      console.warn(`⚠️ yahoo-finance2 chart() failed for ${symbol}:`, libraryError instanceof Error ? libraryError.message : libraryError);
       console.log(`   Falling back to axios API...`);
 
       // Fallback to direct axios call

@@ -19,6 +19,7 @@ export interface TechnicalIndicators {
   atr: number;
   ma20: number;         // 20-day Moving Average
   ma50: number;         // 50-day Moving Average (for CSS)
+  ma50Slope: number;    // MA50 trend slope (v4.3) - positive = uptrend, negative = downtrend
 }
 
 /**
@@ -30,23 +31,26 @@ export interface CSSBreakdown {
   vixScore: number;
   rsiScore: number;
   bbWidthScore: number;
-  ma50Score: number;
+  ma50Score: number;              // Base score before slope adjustment
+  ma50ScoreAdjusted: number;      // Final score after slope bonus (v4.3)
   fearGreedScore: number | null;  // null if fetching failed
-  
+
   // Raw indicator values for reference
   vixValue: number;
   rsiValue: number;
   bbWidthValue: number;
   ma50DeviationPercent: number;   // Price vs MA50 deviation %
+  ma50Slope: number;              // MA50 trend slope (v4.3)
+  ma50SlopeBonus: number;         // Slope bonus applied (-15 to +15) (v4.3)
   fearGreedValue: number | null;
-  
+
   // Calculated values
   totalCSS: number;               // Weighted sum (0-100)
   multiplier: number;             // CSS mapped to 0.5-1.2
-  
+
   // Status flags
   fearGreedFailed: boolean;       // True if CNN scraping failed
-  vixWeightAdjusted: boolean;     // True if VIX weight was doubled due to F&G failure
+  weightsAdjusted: boolean;       // True if weights were adjusted due to F&G failure (v4.3)
 }
 
 export interface StockAnalysis {

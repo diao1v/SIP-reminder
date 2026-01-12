@@ -41,3 +41,6 @@ temp/
 
 # pnpm
 .pnpm-store/
+
+# claude-ai
+.claude/

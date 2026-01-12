@@ -46,15 +46,62 @@ export const BUDGET_CONSTRAINTS = {
 } as const;
 
 /**
- * CSS Indicator Weights (v4.2)
+ * CSS Indicator Weights (v4.3)
  * Total: 100%
+ *
+ * Changes from v4.2:
+ * - RSI increased from 0.25 to 0.30 (more actionable, asset-specific)
+ * - FEAR_GREED reduced from 0.20 to 0.15 (reduces redundancy with VIX)
  */
 export const CSS_WEIGHTS = {
   VIX: 0.20,           // Market-wide fear indicator
-  RSI: 0.25,           // Per-asset momentum
+  RSI: 0.30,           // Per-asset momentum (increased from 0.25)
   BB_WIDTH: 0.15,      // Per-asset volatility
   MA50: 0.20,          // Per-asset trend/discount
-  FEAR_GREED: 0.20     // Market-wide sentiment
+  FEAR_GREED: 0.15     // Market-wide sentiment (reduced from 0.20)
+} as const;
+
+/**
+ * Fear & Greed Fallback Weights (v4.3)
+ * Used when F&G API fetch fails
+ * Redistributes F&G's 15% to VIX (+7.5%) and RSI (+7.5%)
+ */
+export const CSS_WEIGHTS_FG_FALLBACK = {
+  VIX: 0.275,          // 0.20 + 0.075 from F&G
+  RSI: 0.375,          // 0.30 + 0.075 from F&G
+  BB_WIDTH: 0.15,      // unchanged
+  MA50: 0.20,          // unchanged
+  FEAR_GREED: 0.00     // not available
+} as const;
+
+/**
+ * MA50 Slope Configuration (v4.3)
+ * Trend-aware scoring to prevent "catching falling knives"
+ */
+export const MA50_SLOPE_CONFIG = {
+  // Lookback period for slope calculation (in days)
+  LOOKBACK_DAYS: 50,
+
+  // Slope thresholds (as decimal, e.g., 0.010 = 1.0%)
+  STRONG_UPTREND: 0.010,      // > 1.0% = strong uptrend
+  MODERATE_UPTREND: 0.003,    // > 0.3% = moderate uptrend
+  FLAT_THRESHOLD: -0.003,     // > -0.3% = flat/neutral
+  MODERATE_DOWNTREND: -0.010, // > -1.0% = moderate downtrend
+  // Below -1.0% = strong downtrend
+
+  // Slope bonus points (applied to MA50 score)
+  BONUS_STRONG_UP: 15,
+  BONUS_MODERATE_UP: 8,
+  BONUS_FLAT: 0,
+  BONUS_MODERATE_DOWN: -8,
+  BONUS_STRONG_DOWN: -15,
+
+  // Only apply slope bonus when price is this % below MA50
+  APPLY_WHEN_DISCOUNT_BELOW: -10,  // -10% or worse
+
+  // Clamp final MA50 score to this range
+  MIN_SCORE: 20,
+  MAX_SCORE: 90
 } as const;
 
 /**
@@ -135,5 +182,7 @@ export const FEAR_GREED_SCORE_THRESHOLDS: Array<{ maxFG: number; score: number }
 
 /**
  * History days needed for calculations
+ * v4.3: Increased to 150 to ensure enough data for MA50 slope calculation
+ * (need 50 days for MA50 + 50 days lookback for slope = 100 trading days minimum)
  */
-export const HISTORY_DAYS = 100; // Enough for MA50 calculation (~70 trading days)
+export const HISTORY_DAYS = 150; // ~100+ trading days for MA50 slope calculation

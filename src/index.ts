@@ -38,9 +38,9 @@ app.get('/', (c) => {
   const config = loadConfig();
   return c.json({
     name: 'SIP Portfolio Advisor API',
-    version: '4.2.0',
+    version: '4.3.0',
     description: 'CSS (Composite Signal Score) Weekly Investment System',
-    strategy: 'CSS v4.2 - 5 weighted indicators, never pause investing',
+    strategy: 'CSS v4.3 - 5 weighted indicators with MA50 slope filter, never pause investing',
     endpoints: {
       'GET /health': 'Health check for monitoring',
       'GET /api/analyze': 'Get latest analysis without sending email',
@@ -95,7 +95,7 @@ async function runScheduledAnalysis(): Promise<void> {
     const engine = new PortfolioAllocationEngine();
     const report = await engine.generateAllocation(config);
 
-    console.log('\n📊 Analysis complete (CSS v4.2)!');
+    console.log('\n📊 Analysis complete (CSS v4.3)!');
     console.log(`   VIX: ${report.vix.toFixed(2)} | F&G: ${report.fearGreedIndex ?? 'FAILED'}`);
     console.log(`   Market CSS: ${report.marketCSS.toFixed(1)} | Condition: ${report.marketCondition}`);
     console.log(`   Total: $${report.totalAmount.toFixed(0)} (${report.allocations.length} assets)`);
@@ -142,7 +142,7 @@ async function runScheduledAnalysis(): Promise<void> {
 const config = loadConfig();
 const port = config.port;
 
-console.log('🚀 SIP Portfolio Advisor - CSS Strategy v4.2');
+console.log('🚀 SIP Portfolio Advisor - CSS Strategy v4.3');
 console.log('='.repeat(60));
 console.log(`📡 Server starting on port ${port}...`);
 
@@ -181,7 +181,7 @@ serve({
   }
   
   console.log('');
-  console.log('Configuration (CSS v4.2):');
+  console.log('Configuration (CSS v4.3):');
   console.log(`  💰 Base Budget: $${config.weeklyInvestmentAmount} (Range: $${config.minBudget} - $${config.maxBudget})`);
   console.log(`  📈 Stocks: ${config.defaultStocks.join(', ')}`);
   console.log(`  📧 Email Recipients: ${config.emailTo.length}`);

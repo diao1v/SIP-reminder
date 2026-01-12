@@ -62,9 +62,22 @@ interface YahooChartResponse {
 
 /**
  * Market Data Service
- * 
+ *
  * Uses yahoo-finance2 library as primary data source with
  * direct axios API calls as fallback for resilience.
+ *
+ * ## Error Handling Strategy: NEVER THROWS
+ *
+ * This service uses a graceful degradation pattern:
+ * 1. Try primary source (yahoo-finance2)
+ * 2. On failure, try fallback source (direct axios API)
+ * 3. On complete failure, return simulated/default data
+ *
+ * **Rationale:** Market data failures should never prevent the
+ * investment analysis from completing. It's better to use slightly
+ * stale or estimated data than to fail entirely.
+ *
+ * All methods track their data source via `getLastDataSource()`.
  */
 export class MarketDataService {
   private static readonly VIX_SYMBOL = '^VIX';
@@ -84,9 +97,13 @@ export class MarketDataService {
   }
 
   /**
-   * Fetches real-time market data for a given stock symbol
-   * Primary: yahoo-finance2 library
-   * Fallback: Direct axios API call
+   * Fetches real-time market data for a given stock symbol.
+   *
+   * @param symbol - Stock ticker symbol (e.g., "AAPL", "QQQ")
+   * @returns Market data with source indicator - NEVER throws
+   *
+   * @remarks
+   * Fallback chain: yahoo-finance2 → axios API → simulated data
    */
   async fetchStockData(symbol: string): Promise<MarketDataWithSource> {
     // Try yahoo-finance2 first
@@ -161,10 +178,14 @@ export class MarketDataService {
   }
 
   /**
-   * Fetches historical price data for technical analysis
-   * Primary: yahoo-finance2 chart() method
-   * Fallback: Direct axios API call
-   * Default 150 days for MA50 slope calculation (CSS v4.3)
+   * Fetches historical price data for technical analysis.
+   *
+   * @param symbol - Stock ticker symbol
+   * @param days - Number of days of history (default: 150 for MA50 slope)
+   * @returns Array of closing prices with source indicator - NEVER throws
+   *
+   * @remarks
+   * Fallback chain: yahoo-finance2 chart() → axios API → simulated data
    */
   async fetchHistoricalData(symbol: string, days: number = HISTORY_DAYS): Promise<{ prices: number[]; source: 'yahoo-finance2' | 'axios-fallback' }> {
     // Try yahoo-finance2 chart() method (replaces deprecated historical())
@@ -233,9 +254,13 @@ export class MarketDataService {
   }
 
   /**
-   * Fetches VIX (Volatility Index) data
-   * Primary: yahoo-finance2 library
-   * Fallback: Direct axios API call
+   * Fetches VIX (Volatility Index) data.
+   *
+   * @returns VIX value with source indicator - NEVER throws
+   *
+   * @remarks
+   * Fallback chain: yahoo-finance2 → axios API → default value (18.5)
+   * Default 18.5 represents moderate/neutral volatility.
    */
   async fetchVIX(): Promise<{ vix: number; source: 'yahoo-finance2' | 'axios-fallback' }> {
     // Try yahoo-finance2 first

@@ -3,10 +3,19 @@ import { AllocationReport, DatabaseSaveResult, PortfolioAllocation, TechnicalDat
 
 /**
  * Database Service for Convex integration
- * 
+ *
  * Handles saving and retrieving analysis data from Convex database.
- * Gracefully handles errors to not block the main analysis flow.
- * 
+ *
+ * ## Error Handling Strategy: SUCCESS FLAG / EMPTY RETURNS
+ *
+ * This service NEVER throws. Instead:
+ * - `saveAnalysisReport()` returns `{ success: boolean, error?: string }`
+ * - Query methods return empty arrays `[]` or `null` on failure
+ * - Constructor sets `enabled: false` if initialization fails
+ *
+ * **Rationale:** Database is optional storage. Analysis should complete
+ * even if persistence fails. Use `isEnabled()` to check availability.
+ *
  * IMPORTANT: Before using this service, you must:
  * 1. Run `pnpm exec convex dev` to initialize Convex and generate API types
  * 2. Set CONVEX_URL in your .env file

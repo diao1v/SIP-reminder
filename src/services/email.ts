@@ -1,6 +1,20 @@
 import * as nodemailer from 'nodemailer';
 import { AllocationReport, Config, PortfolioAllocation, TechnicalDataRow } from '../types';
 
+/**
+ * Email Service
+ *
+ * Sends HTML portfolio allocation reports via SMTP.
+ *
+ * ## Error Handling Strategy: THROWS ON FAILURE
+ *
+ * Unlike other services, email failures are re-thrown because:
+ * - Email is an explicit user action, not background data fetching
+ * - Users should know if their report wasn't delivered
+ * - Callers can catch and handle gracefully (e.g., retry, notify)
+ *
+ * Use `testConnection()` to verify SMTP config before sending.
+ */
 export class EmailService {
   private transporter: nodemailer.Transporter;
 
@@ -18,8 +32,14 @@ export class EmailService {
   }
 
   /**
-   * Send portfolio allocation report via email
-   * Supports multiple recipients (array of email addresses)
+   * Send portfolio allocation report via email.
+   *
+   * @param report - The allocation report to send
+   * @param emailTo - Single email or array of recipients
+   * @throws Error if sending fails (SMTP error, auth failure, etc.)
+   *
+   * @remarks
+   * This method THROWS on failure - wrap in try/catch if graceful handling needed.
    */
   async sendReport(report: AllocationReport, emailTo: string | string[]): Promise<void> {
     const html = this.generateHTML(report);

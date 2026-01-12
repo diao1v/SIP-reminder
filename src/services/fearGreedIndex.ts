@@ -3,21 +3,36 @@ import { FearGreedResponse } from '../types';
 
 /**
  * Fear & Greed Index Service
- * 
+ *
  * Fetches the CNN Fear & Greed Index which measures market sentiment on a 0-100 scale:
  * - 0-25: Extreme Fear
  * - 25-45: Fear
  * - 45-55: Neutral
  * - 55-75: Greed
  * - 75-100: Extreme Greed
+ *
+ * ## Error Handling Strategy: SUCCESS FLAG PATTERN
+ *
+ * This service returns a response object with a `success` boolean:
+ * - `success: true` - Valid data fetched from CNN API
+ * - `success: false` - Fetch failed, returns neutral default (50)
+ *
+ * **Rationale:** F&G is supplementary data. When unavailable, CSS scoring
+ * redistributes its 15% weight to VIX (+7.5%) and RSI (+7.5%).
+ * The caller decides how to handle failures via the success flag.
  */
 export class FearGreedService {
   private static readonly CNN_API_URL = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata';
   private static readonly TIMEOUT_MS = 10000;
 
   /**
-   * Fetch Fear & Greed Index from CNN
-   * Returns null if fetching fails (triggers VIX fallback in CSS calculation)
+   * Fetch Fear & Greed Index from CNN.
+   *
+   * @returns Response with `success` flag - NEVER throws
+   *
+   * @remarks
+   * On failure: returns `{ success: false, value: 50 }` (neutral default).
+   * Caller should check `success` flag to detect failures.
    */
   async fetchFearGreedIndex(): Promise<FearGreedResponse> {
     try {

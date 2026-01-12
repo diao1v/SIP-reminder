@@ -126,19 +126,20 @@ export class PortfolioAllocationEngine {
     vix: number,
     fearGreedIndex: number | null
   ): Promise<StockAnalysis[]> {
-    const analyses: StockAnalysis[] = [];
-    
-    for (const symbol of symbols) {
-      try {
-        const analysis = await this.analyzeStock(symbol, vix, fearGreedIndex);
-        analyses.push(analysis);
-        console.log(`✓ ${symbol}: CSS=${analysis.cssBreakdown.totalCSS.toFixed(1)} (${analysis.cssBreakdown.multiplier}x) RSI=${analysis.technicalIndicators.rsi.toFixed(1)}`);
-      } catch (error) {
-        console.error(`✗ Failed to analyze ${symbol}:`, error);
-      }
-    }
-    
-    return analyses;
+    const analysisPromises = symbols.map(symbol =>
+      this.analyzeStock(symbol, vix, fearGreedIndex)
+        .then(analysis => {
+          console.log(`✓ ${symbol}: CSS=${analysis.cssBreakdown.totalCSS.toFixed(1)} (${analysis.cssBreakdown.multiplier}x) RSI=${analysis.technicalIndicators.rsi.toFixed(1)}`);
+          return analysis;
+        })
+        .catch(error => {
+          console.error(`✗ Failed to analyze ${symbol}:`, error);
+          return null;
+        })
+    );
+
+    const results = await Promise.all(analysisPromises);
+    return results.filter((a): a is StockAnalysis => a !== null);
   }
 
   /**

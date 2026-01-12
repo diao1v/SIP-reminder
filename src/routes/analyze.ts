@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { PortfolioAllocationEngine } from '../services/portfolioAllocation';
 import { EmailService } from '../services/email';
 import { DatabaseService } from '../services/database';
-import { loadConfig } from '../utils/config';
+import { getConfig } from '../utils/config';
 import { analyzeBodySchema, formatZodError } from '../utils/validation';
 import { AllocationReport, Config, DatabaseSaveResult } from '../types';
 
@@ -25,7 +25,7 @@ function getDbService(convexUrl: string): DatabaseService {
  */
 analyzeRouter.get('/', async (c) => {
   try {
-    const config = loadConfig();
+    const config = getConfig();
     const engine = new PortfolioAllocationEngine();
     const report = await engine.generateAllocation(config);
 
@@ -63,7 +63,7 @@ analyzeRouter.post(
   async (c) => {
   try {
     const body = c.req.valid('json');
-    const baseConfig = loadConfig();
+    const baseConfig = getConfig();
 
     // Create config with overrides from request body
     const config: Config = {

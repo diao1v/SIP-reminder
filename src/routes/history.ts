@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { DatabaseService } from '../services/database';
-import { loadConfig } from '../utils/config';
+import { getConfig } from '../utils/config';
 import {
   historyQuerySchema,
   stockParamSchema,
@@ -18,7 +18,7 @@ let dbService: DatabaseService | null = null;
 
 function getDbService(): DatabaseService {
   if (!dbService) {
-    const config = loadConfig();
+    const config = getConfig();
     dbService = new DatabaseService(config.convexUrl);
   }
   return dbService;

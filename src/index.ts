@@ -3,16 +3,16 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import * as cron from 'node-cron';
-import * as dotenv from 'dotenv';
 import { analyzeRouter } from './routes/analyze';
 import { historyRouter } from './routes/history';
-import { loadConfig, validateConfig } from './utils/config';
+import { getConfig } from './utils/config';
 import { PortfolioAllocationEngine } from './services/portfolioAllocation';
 import { EmailService } from './services/email';
 import { DatabaseService } from './services/database';
 
-// Load environment variables
-dotenv.config();
+// Load and validate config at startup (fail-fast)
+// This will throw if required env vars are missing
+const config = getConfig();
 
 const app = new Hono();
 
@@ -35,7 +35,6 @@ app.route('/api/history', historyRouter);
 
 // Root endpoint with API info
 app.get('/', (c) => {
-  const config = loadConfig();
   return c.json({
     name: 'SIP Portfolio Advisor API',
     version: '4.3.0',
@@ -80,13 +79,7 @@ async function runScheduledAnalysis(): Promise<void> {
   console.log(`Time: ${new Date().toISOString()}`);
 
   try {
-    const config = loadConfig();
-    
-    if (!validateConfig(config)) {
-      console.error('❌ Configuration validation failed');
-      return;
-    }
-
+    // Config is already validated at startup, just use it
     console.log(`📧 Recipients: ${config.emailTo.join(', ')}`);
     console.log(`💰 Weekly Amount: $${config.weeklyInvestmentAmount}`);
     console.log(`📈 Stocks: ${config.defaultStocks.join(', ')}`);
@@ -139,7 +132,6 @@ async function runScheduledAnalysis(): Promise<void> {
 }
 
 // Start server and cron scheduler
-const config = loadConfig();
 const port = config.port;
 
 console.log('🚀 SIP Portfolio Advisor - CSS Strategy v4.3');

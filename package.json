@@ -8,7 +8,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "test": "jest",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint src"
   },
   "keywords": [
@@ -38,9 +40,11 @@
     "@types/node": "^20.10.0",
     "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^6.4.14",
+    "@vitest/coverage-v8": "^4.0.17",
     "eslint": "^9.39.2",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.51.0"
+    "typescript-eslint": "^8.51.0",
+    "vitest": "^4.0.17"
   }
 }

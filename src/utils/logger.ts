@@ -1,8 +1,15 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 /**
- * Structured Logging Utility
+ * Structured Logging Utility with File Persistence
  *
  * Provides typed log levels with optional structured context.
- * Configure via LOG_LEVEL env var: 'debug' | 'info' | 'warn' | 'error'
+ * Outputs to both console and file (if LOG_FILE is set).
+ *
+ * Environment variables:
+ * - LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error' (default: 'info')
+ * - LOG_FILE: Path to log file (optional, e.g., './logs/app.log')
  *
  * @example
  * ```typescript
@@ -29,10 +36,39 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 
 class Logger {
   private level: LogLevel;
+  private logFilePath: string | null = null;
+  private fileStream: fs.WriteStream | null = null;
 
   constructor() {
     const envLevel = (process.env.LOG_LEVEL || 'info').toLowerCase() as LogLevel;
     this.level = LOG_LEVELS[envLevel] !== undefined ? envLevel : 'info';
+
+    // Initialize file logging if LOG_FILE is set
+    const logFile = process.env.LOG_FILE;
+    if (logFile) {
+      this.initFileLogging(logFile);
+    }
+  }
+
+  /**
+   * Initialize file logging
+   */
+  private initFileLogging(filePath: string): void {
+    try {
+      // Ensure directory exists
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      // Open file stream in append mode
+      this.logFilePath = filePath;
+      this.fileStream = fs.createWriteStream(filePath, { flags: 'a' });
+
+      console.log(`📁 Logging to file: ${filePath}`);
+    } catch (error) {
+      console.error(`Failed to initialize file logging: ${error}`);
+    }
   }
 
   private shouldLog(level: LogLevel): boolean {
@@ -50,12 +86,30 @@ class Logger {
     return pairs ? ` [${pairs}]` : '';
   }
 
+  private formatTimestamp(): string {
+    return new Date().toISOString();
+  }
+
+  /**
+   * Write to log file if enabled
+   */
+  private writeToFile(level: LogLevel, message: string, context?: LogContext): void {
+    if (!this.fileStream) return;
+
+    const timestamp = this.formatTimestamp();
+    const contextStr = this.formatContext(context);
+    const line = `${timestamp} [${level.toUpperCase()}] ${message}${contextStr}\n`;
+
+    this.fileStream.write(line);
+  }
+
   /**
    * Debug level - verbose information for development
    */
   debug(message: string, context?: LogContext): void {
     if (this.shouldLog('debug')) {
       console.log(`[DEBUG] ${message}${this.formatContext(context)}`);
+      this.writeToFile('debug', message, context);
     }
   }
 
@@ -65,6 +119,7 @@ class Logger {
   info(message: string, context?: LogContext): void {
     if (this.shouldLog('info')) {
       console.log(`${message}${this.formatContext(context)}`);
+      this.writeToFile('info', message, context);
     }
   }
 
@@ -74,6 +129,7 @@ class Logger {
   warn(message: string, context?: LogContext): void {
     if (this.shouldLog('warn')) {
       console.warn(`⚠️ ${message}${this.formatContext(context)}`);
+      this.writeToFile('warn', message, context);
     }
   }
 
@@ -83,6 +139,7 @@ class Logger {
   error(message: string, context?: LogContext): void {
     if (this.shouldLog('error')) {
       console.error(`❌ ${message}${this.formatContext(context)}`);
+      this.writeToFile('error', message, context);
     }
   }
 
@@ -92,6 +149,7 @@ class Logger {
   success(message: string, context?: LogContext): void {
     if (this.shouldLog('info')) {
       console.log(`✅ ${message}${this.formatContext(context)}`);
+      this.writeToFile('info', `✅ ${message}`, context);
     }
   }
 
@@ -107,6 +165,23 @@ class Logger {
    */
   setLevel(level: LogLevel): void {
     this.level = level;
+  }
+
+  /**
+   * Get log file path (if file logging is enabled)
+   */
+  getLogFilePath(): string | null {
+    return this.logFilePath;
+  }
+
+  /**
+   * Close file stream (call on app shutdown)
+   */
+  close(): void {
+    if (this.fileStream) {
+      this.fileStream.end();
+      this.fileStream = null;
+    }
   }
 }
 

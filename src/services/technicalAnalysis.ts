@@ -148,6 +148,40 @@ export class TechnicalAnalysisService {
   }
 
   /**
+   * Calculate MA50 Slope (v4.3)
+   * Measures the trend direction of MA50 over a lookback period
+   *
+   * @param prices - Array of historical prices (oldest to newest)
+   * @param lookbackDays - Number of days to calculate slope over (default 50)
+   * @returns Slope as decimal (e.g., 0.015 = 1.5% increase)
+   */
+  calculateMA50Slope(prices: number[], lookbackDays: number = 50): number {
+    // Need at least lookbackDays + 50 prices to calculate two MA50 values
+    const minRequired = lookbackDays + 50;
+    if (prices.length < minRequired) {
+      console.warn(`⚠️ Not enough data for MA50 slope (have ${prices.length}, need ${minRequired})`);
+      return 0; // Neutral if not enough data
+    }
+
+    // Calculate current MA50 (using most recent 50 prices)
+    const currentMA50 = this.calculateSMA(prices, 50);
+
+    // Calculate MA50 from lookbackDays ago
+    // Get prices up to lookbackDays ago
+    const historicalPrices = prices.slice(0, prices.length - lookbackDays);
+    const historicalMA50 = this.calculateSMA(historicalPrices, 50);
+
+    if (historicalMA50 === 0) {
+      return 0; // Avoid division by zero
+    }
+
+    // Calculate slope as percentage change
+    const slope = (currentMA50 - historicalMA50) / historicalMA50;
+
+    return Math.round(slope * 10000) / 10000; // Round to 4 decimal places
+  }
+
+  /**
    * Calculate Bollinger Bands
    * Primary: technicalindicators library
    * Fallback: Custom implementation
@@ -333,9 +367,10 @@ export class TechnicalAnalysisService {
     const bollingerBands = this.calculateBollingerBands(prices);
     const ma20 = this.calculateMA20(prices);
     const ma50 = this.calculateMA50(prices);
+    const ma50Slope = this.calculateMA50Slope(prices); // v4.3
     const atr = this.calculateATR(prices);
     const rsi = this.calculateRSI(prices);
-    
+
     return {
       rsi,
       bollingerBands,
@@ -343,6 +378,7 @@ export class TechnicalAnalysisService {
       atr,
       ma20,
       ma50,
+      ma50Slope,
       dataSource: this.lastDataSource
     };
   }

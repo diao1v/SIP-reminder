@@ -1,18 +1,19 @@
 # SIP Portfolio Reminder Bot 📊
 
-Weekly portfolio allocation system using **CSS (Composite Signal Score) v4.2** strategy with automated technical analysis and professional email reporting.
+Weekly portfolio allocation system using **CSS (Composite Signal Score) v4.3** strategy with automated technical analysis and professional email reporting.
 
 ## 🌟 Features
 
-- **CSS Strategy v4.2**: 5-indicator weighted scoring system that never pauses investing
+- **CSS Strategy v4.3**: 5-indicator weighted scoring system that never pauses investing
+- **MA50 Slope Filter**: Trend-aware scoring to prevent "catching falling knives"
 - **Real-time Market Data**: Fetches VIX, stock prices, and Fear & Greed Index from CNN
-- **Technical Analysis**: Calculates RSI, Bollinger Bands, ATR, MA20, and MA50
+- **Technical Analysis**: Calculates RSI, Bollinger Bands, ATR, MA20, MA50, and MA50 slope
 - **Smart Allocation**: CSS score determines investment multiplier (0.5x - 1.2x)
 - **Professional Reports**: Beautifully formatted HTML email with CSS breakdown
-- **Fallback Safety**: VIX weight doubles if Fear & Greed scraping fails
+- **Intelligent Fallback**: F&G failure redistributes weight to VIX and RSI
 - **Budget Caps**: Never invest less than 50% or more than 120% of base budget
 
-## 📈 CSS Strategy v4.2
+## 📈 CSS Strategy v4.3
 
 ### Portfolio Allocation
 | Asset | Allocation | Category |
@@ -25,10 +26,15 @@ Weekly portfolio allocation system using **CSS (Composite Signal Score) v4.2** s
 | VXUS  | 10%        | International - Non-US |
 | TLT   | 15%        | Hedge - Treasury bonds |
 
-### CSS Formula
+### CSS Formula (v4.3)
 ```
-CSS = (VIX × 20%) + (RSI × 25%) + (BB Width × 15%) + (MA50 × 20%) + (Fear & Greed × 20%)
+CSS = (VIX × 20%) + (RSI × 30%) + (BB Width × 15%) + (MA50 × 20%) + (Fear & Greed × 15%)
 ```
+
+**v4.3 Changes from v4.2:**
+- RSI weight increased from 25% → 30% (more actionable, asset-specific)
+- Fear & Greed weight reduced from 20% → 15% (reduces redundancy with VIX)
+- MA50 slope filter added to prevent buying in downtrends
 
 ### CSS to Multiplier Mapping
 | CSS Score | Interpretation | Multiplier |
@@ -41,6 +47,20 @@ CSS = (VIX × 20%) + (RSI × 25%) + (BB Width × 15%) + (MA50 × 20%) + (Fear & 
 | 76-100    | Extreme Fear   | 1.2x (capped) |
 
 **Key Principle**: Never pause investing. Even in extreme greed, invest at 50% of base.
+
+### MA50 Slope Filter (v4.3)
+
+When an asset is **10%+ below its MA50**, the slope filter adjusts the score:
+
+| MA50 Trend | Slope Bonus | Effect |
+|------------|-------------|--------|
+| Strong uptrend (>1%) | +15 | Reward: discount in recovering market |
+| Moderate uptrend | +8 | Slight reward |
+| Flat | 0 | No adjustment |
+| Moderate downtrend | -8 | Caution: still falling |
+| Strong downtrend (<-1%) | -15 | Penalty: avoid falling knife |
+
+This prevents max-buying during market crashes while rewarding true recovery opportunities.
 
 ## 🚀 Quick Start
 
@@ -155,7 +175,7 @@ GET /api/history/range?start=2025-01-01T00:00:00.000Z&end=2025-12-31T23:59:59.99
 ## 📊 Example Output
 
 ```
-🚀 SIP Portfolio Reminder Bot - CSS Strategy v4.2
+🚀 SIP Portfolio Advisor - CSS Strategy v4.3
 ============================================================
 📡 Server starting on port 3002...
 ✅ Server running at http://localhost:3002
@@ -169,22 +189,22 @@ Available endpoints:
    (Wednesday at 20:00)
    Timezone: Pacific/Auckland (NZST)
 
-Configuration:
+Configuration (CSS v4.3):
   💰 Base Budget: $250 (Range: $125 - $300)
   📈 Stocks: QQQ, GOOG, AIQ, TSLA, XLV, VXUS, TLT
   📧 Email Recipients: 2
 ============================================================
 
 --- Analysis triggered ---
+🔍 Fetching market data and analyzing (CSS v4.3)...
 📊 Fetching Fear & Greed Index from CNN...
-✅ Fear & Greed Index: 44 (Fear)
-📈 Fetching market data...
-✅ VIX: 14.95
+✅ Fear & Greed Index: 51 (Neutral)
+✅ VIX: 16.52 via yahoo-finance2
 
-📊 Analysis complete (CSS v4.2)!
-   VIX: 14.95 | F&G: 44
-   Market CSS: 52.3 | Condition: NEUTRAL
-   Total: $248 (7 assets)
+📊 Analysis complete (CSS v4.3)!
+   VIX: 16.52 | F&G: 51
+   Market CSS: 44.3 | Condition: NEUTRAL
+   Total: $195 (7 assets)
 ```
 
 ## 🛠️ Technology Stack
@@ -219,12 +239,14 @@ Configuration:
 0 20 * * 3   = Every Wednesday at 8:00 PM
 ```
 
-### Fear & Greed Fallback
+### Fear & Greed Fallback (v4.3)
 
 If CNN Fear & Greed Index scraping fails:
-- VIX weight automatically doubles from 20% to 40%
+- F&G's 15% weight is redistributed: VIX (+7.5%) and RSI (+7.5%)
+- Fallback weights: VIX 27.5%, RSI 37.5%, BB 15%, MA50 20%
 - Email report shows ⚠️ warning indicator
 - Analysis continues with adjusted CSS calculation
+- Returns to normal weights when F&G comes back online
 
 ## 🔒 Security Best Practices
 

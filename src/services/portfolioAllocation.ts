@@ -43,7 +43,7 @@ export class PortfolioAllocationEngine {
    * Main method to generate portfolio allocation recommendations
    */
   async generateAllocation(config: Config): Promise<AllocationReport> {
-    console.log('🔍 Fetching market data and analyzing (CSS v4.2)...');
+    console.log('🔍 Fetching market data and analyzing (CSS v4.3)...');
 
     // Track data sources
     let marketDataSource: DataSourceStatus['marketDataSource'] = 'yahoo-finance2';
@@ -260,7 +260,7 @@ export class PortfolioAllocationEngine {
   }
 
   /**
-   * Generate reasoning for allocation
+   * Generate reasoning for allocation (v4.3)
    */
   private generateReasoning(analysis: StockAnalysis): string {
     const { cssBreakdown, technicalIndicators } = analysis;
@@ -277,16 +277,22 @@ export class PortfolioAllocationEngine {
       reasons.push(`Overbought (RSI ${technicalIndicators.rsi.toFixed(0)})`);
     }
 
-    // MA50 insight
+    // MA50 insight with slope (v4.3)
     if (cssBreakdown.ma50DeviationPercent < -5) {
-      reasons.push(`${Math.abs(cssBreakdown.ma50DeviationPercent).toFixed(1)}% below MA50`);
+      let ma50Reason = `${Math.abs(cssBreakdown.ma50DeviationPercent).toFixed(1)}% below MA50`;
+      // Add slope context if bonus was applied
+      if (cssBreakdown.ma50SlopeBonus !== 0) {
+        const trendDir = cssBreakdown.ma50SlopeBonus > 0 ? 'uptrend' : 'downtrend';
+        ma50Reason += ` (${trendDir})`;
+      }
+      reasons.push(ma50Reason);
     } else if (cssBreakdown.ma50DeviationPercent > 5) {
       reasons.push(`${cssBreakdown.ma50DeviationPercent.toFixed(1)}% above MA50`);
     }
 
-    // F&G fallback note
-    if (cssBreakdown.vixWeightAdjusted) {
-      reasons.push('(VIX weight doubled)');
+    // F&G fallback note (v4.3 - updated wording)
+    if (cssBreakdown.weightsAdjusted) {
+      reasons.push('(F&G fallback active)');
     }
 
     return reasons.join('; ');
@@ -335,9 +341,9 @@ export class PortfolioAllocationEngine {
       recommendations.push('⚠️ Technical indicators: Using custom fallback (technicalindicators library failed)');
     }
 
-    // Fear & Greed failure warning
+    // Fear & Greed failure warning (v4.3 - updated message)
     if (!fearGreedResponse.success) {
-      recommendations.push('⚠️ Fear & Greed Index fetch FAILED - VIX weight doubled to 40% as fallback');
+      recommendations.push('⚠️ Fear & Greed Index fetch FAILED - weights redistributed to VIX (+7.5%) and RSI (+7.5%)');
     } else {
       const emoji = this.fearGreedService.getRatingEmoji(fearGreedResponse.rating);
       recommendations.push(`${emoji} Fear & Greed: ${fearGreedIndex} (${fearGreedResponse.rating})`);
@@ -383,7 +389,7 @@ export class PortfolioAllocationEngine {
 
     // Budget reminder
     recommendations.push(`💰 Budget range: $${BUDGET_CONSTRAINTS.MIN_BUDGET} - $${BUDGET_CONSTRAINTS.MAX_BUDGET} (never $0)`);
-    recommendations.push('📊 CSS v4.2: Always invest at least 0.5x, maximum 1.2x');
+    recommendations.push('📊 CSS v4.3: Always invest at least 0.5x, maximum 1.2x');
 
     return recommendations;
   }

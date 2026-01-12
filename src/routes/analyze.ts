@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
 import { PortfolioAllocationEngine } from '../services/portfolioAllocation';
 import { EmailService } from '../services/email';
 import { DatabaseService } from '../services/database';
 import { loadConfig } from '../utils/config';
+import { analyzeBodySchema, formatZodError } from '../utils/validation';
 import { AllocationReport, Config, DatabaseSaveResult } from '../types';
 
 const analyzeRouter = new Hono();
@@ -15,13 +17,6 @@ function getDbService(convexUrl: string): DatabaseService {
     dbService = new DatabaseService(convexUrl);
   }
   return dbService;
-}
-
-interface AnalyzeRequestBody {
-  investmentAmount?: number;
-  stocks?: string[];
-  sendEmail?: boolean;
-  saveToDatabase?: boolean;
 }
 
 /**
@@ -54,9 +49,20 @@ analyzeRouter.get('/', async (c) => {
  * Manual trigger for one-off investment analysis
  * Accepts optional parameters to override config
  */
-analyzeRouter.post('/', async (c) => {
+analyzeRouter.post(
+  '/',
+  zValidator('json', analyzeBodySchema, (result, c) => {
+    if (!result.success) {
+      return c.json({
+        success: false,
+        error: 'Validation failed',
+        details: formatZodError(result.error),
+      }, 400);
+    }
+  }),
+  async (c) => {
   try {
-    const body = await c.req.json<AnalyzeRequestBody>().catch((): AnalyzeRequestBody => ({}));
+    const body = c.req.valid('json');
     const baseConfig = loadConfig();
 
     // Create config with overrides from request body

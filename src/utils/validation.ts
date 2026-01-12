@@ -4,14 +4,6 @@ import { z } from 'zod';
  * Validation schemas for API request parameters
  */
 
-// Stock symbol: 1-10 uppercase letters
-const stockSymbolSchema = z
-  .string()
-  .min(1, 'Stock symbol cannot be empty')
-  .max(10, 'Stock symbol too long')
-  .regex(/^[A-Z]+$/, 'Stock symbol must be uppercase letters only')
-  .transform(val => val.toUpperCase());
-
 // Flexible stock symbol that accepts lowercase and transforms to uppercase
 const flexibleStockSymbolSchema = z
   .string()

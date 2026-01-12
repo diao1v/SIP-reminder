@@ -4,7 +4,7 @@ import { MarketDataService } from './marketData';
 import { TechnicalAnalysisService } from './technicalAnalysis';
 import { CSSService } from './cssScoring';
 import { FearGreedService } from './fearGreedIndex';
-import { Config, StockAnalysis, TechnicalIndicators, CSSBreakdown } from '../types';
+import { Config, TechnicalIndicators, CSSBreakdown } from '../types';
 
 // ===========================================================================
 // Mock Setup

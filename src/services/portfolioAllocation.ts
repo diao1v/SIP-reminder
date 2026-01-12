@@ -155,8 +155,11 @@ export class PortfolioAllocationEngine {
     vix: number,
     fearGreedIndex: number | null
   ): Promise<StockAnalysis> {
-    const marketData = await this.marketDataService.fetchStockData(symbol);
-    const historicalResult = await this.marketDataService.fetchHistoricalData(symbol);
+    // Fetch market data and historical data in parallel for better performance
+    const [marketData, historicalResult] = await Promise.all([
+      this.marketDataService.fetchStockData(symbol),
+      this.marketDataService.fetchHistoricalData(symbol)
+    ]);
     const technicalIndicators = this.technicalAnalysisService.calculateIndicators(historicalResult.prices);
     
     // Calculate CSS breakdown for this asset
@@ -231,8 +234,8 @@ export class PortfolioAllocationEngine {
     const basePercentage = this.getBaseAllocationPercentage(symbol);
     const baseAmount = (baseBudget * basePercentage) / 100;
 
-    // Apply CSS multiplier
-    const multiplier = cssBreakdown.multiplier;
+    // Apply CSS multiplier (guard against NaN from failed calculations)
+    const multiplier = isNaN(cssBreakdown.multiplier) ? 1.0 : cssBreakdown.multiplier;
     let finalAmount = baseAmount * multiplier;
 
     // Apply min/max constraints proportionally

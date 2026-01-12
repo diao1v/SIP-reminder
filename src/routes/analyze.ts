@@ -2,22 +2,12 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { PortfolioAllocationEngine } from '../services/portfolioAllocation';
 import { EmailService } from '../services/email';
-import { DatabaseService } from '../services/database';
+import { getDbService } from '../services/db.singleton';
 import { getConfig } from '../utils/config';
 import { analyzeBodySchema, formatZodError } from '../utils/validation';
 import { AllocationReport, Config, DatabaseSaveResult } from '../types';
 
 const analyzeRouter = new Hono();
-
-// Database service singleton
-let dbService: DatabaseService | null = null;
-
-function getDbService(convexUrl: string): DatabaseService {
-  if (!dbService) {
-    dbService = new DatabaseService(convexUrl);
-  }
-  return dbService;
-}
 
 /**
  * GET /api/analyze

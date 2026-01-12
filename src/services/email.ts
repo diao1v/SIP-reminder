@@ -17,8 +17,10 @@ import { AllocationReport, Config, PortfolioAllocation, TechnicalDataRow } from 
  */
 export class EmailService {
   private transporter: nodemailer.Transporter;
+  private fromAddress: string;
 
   constructor(config: Config) {
+    this.fromAddress = `"SIP Portfolio Reminder" <${config.smtp.user}>`;
     this.transporter = nodemailer.createTransport({
       host: config.smtp.host,
       port: config.smtp.port,
@@ -50,7 +52,7 @@ export class EmailService {
 
     try {
       await this.transporter.sendMail({
-        from: '"SIP Portfolio Reminder Bot" <sip_reminder@mail.diaoev.com>',
+        from: this.fromAddress,
         to: recipients,
         subject,
         html

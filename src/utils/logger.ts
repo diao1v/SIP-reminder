@@ -67,7 +67,8 @@ class Logger {
 
       console.log(`📁 Logging to file: ${filePath}`);
     } catch (error) {
-      console.error(`Failed to initialize file logging: ${error}`);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error(`Failed to initialize file logging: ${errMsg}`);
     }
   }
 

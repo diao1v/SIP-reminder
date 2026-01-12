@@ -312,7 +312,8 @@ export class MarketDataService {
   ): Promise<T> {
     const config: AxiosRequestConfig = {
       params,
-      headers: MarketDataService.DEFAULT_HEADERS
+      headers: MarketDataService.DEFAULT_HEADERS,
+      timeout: 15000  // 15 second timeout
     };
 
     const response = await axios.get<T>(

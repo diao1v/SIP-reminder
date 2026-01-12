@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { DatabaseService } from '../services/database';
+import { getDbService } from '../services/db.singleton';
 import { getConfig } from '../utils/config';
 import {
   historyQuerySchema,
@@ -13,15 +13,10 @@ import {
 
 const historyRouter = new Hono();
 
-// Initialize database service
-let dbService: DatabaseService | null = null;
-
-function getDbService(): DatabaseService {
-  if (!dbService) {
-    const config = getConfig();
-    dbService = new DatabaseService(config.convexUrl);
-  }
-  return dbService;
+// Helper to get database service with config
+function getDb() {
+  const config = getConfig();
+  return getDbService(config.convexUrl);
 }
 
 /**
@@ -40,7 +35,7 @@ historyRouter.get(
     }
   }),
   async (c) => {
-    const db = getDbService();
+    const db = getDb();
 
     if (!db.isEnabled()) {
       return c.json({
@@ -73,7 +68,7 @@ historyRouter.get(
  * Get the most recent snapshot with stock details
  */
 historyRouter.get('/latest', async (c) => {
-  const db = getDbService();
+  const db = getDb();
   
   if (!db.isEnabled()) {
     return c.json({
@@ -110,7 +105,7 @@ historyRouter.get('/latest', async (c) => {
  * Get summary statistics
  */
 historyRouter.get('/stats', async (c) => {
-  const db = getDbService();
+  const db = getDb();
   
   if (!db.isEnabled()) {
     return c.json({
@@ -167,7 +162,7 @@ historyRouter.get(
     }
   }),
   async (c) => {
-    const db = getDbService();
+    const db = getDb();
 
     if (!db.isEnabled()) {
       return c.json({
@@ -214,7 +209,7 @@ historyRouter.get(
     }
   }),
   async (c) => {
-    const db = getDbService();
+    const db = getDb();
 
     if (!db.isEnabled()) {
       return c.json({
@@ -264,7 +259,7 @@ historyRouter.get(
     }
   }),
   async (c) => {
-    const db = getDbService();
+    const db = getDb();
 
     if (!db.isEnabled()) {
       return c.json({

@@ -55,8 +55,8 @@ export interface CSSBreakdown {
 
 export interface StockAnalysis {
   symbol: string;
-  marketData: MarketData;
-  technicalIndicators: TechnicalIndicators;
+  marketData: MarketDataWithSource;
+  technicalIndicators: TechnicalIndicatorsWithSource;
   cssBreakdown: CSSBreakdown;     // CSS scoring for this asset
   signal: 'BUY' | 'HOLD';         // No SELL - we never fully stop
   strength: number;               // 0-100
@@ -122,6 +122,7 @@ export interface Config {
   riskTolerance: 'conservative' | 'moderate' | 'aggressive';
   port: number;
   cronSchedule: string;
+  timezone: string;               // Timezone for cron scheduling (e.g., 'Pacific/Auckland')
   minBudget: number;              // Minimum weekly budget ($125)
   maxBudget: number;              // Maximum weekly budget ($300)
   convexUrl: string;              // Convex database URL (optional)
@@ -151,7 +152,7 @@ export interface FearGreedResponse {
  * Shows which data sources were used (primary library or fallback)
  */
 export interface DataSourceStatus {
-  marketDataSource: 'yahoo-finance2' | 'axios-fallback';
+  marketDataSource: 'yahoo-finance2' | 'axios-fallback' | 'simulated';
   indicatorSource: 'technicalindicators' | 'custom-fallback';
 }
 
@@ -159,7 +160,7 @@ export interface DataSourceStatus {
  * Extended market data with source tracking
  */
 export interface MarketDataWithSource extends MarketData {
-  dataSource: 'yahoo-finance2' | 'axios-fallback';
+  dataSource: 'yahoo-finance2' | 'axios-fallback' | 'simulated';
 }
 
 /**

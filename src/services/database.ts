@@ -1,12 +1,23 @@
 import { ConvexHttpClient } from "convex/browser";
 import { AllocationReport, DatabaseSaveResult, PortfolioAllocation, TechnicalDataRow } from "../types";
+import { CSSService } from "./cssScoring";
+import { logger } from "../utils/logger";
 
 /**
  * Database Service for Convex integration
- * 
+ *
  * Handles saving and retrieving analysis data from Convex database.
- * Gracefully handles errors to not block the main analysis flow.
- * 
+ *
+ * ## Error Handling Strategy: SUCCESS FLAG / EMPTY RETURNS
+ *
+ * This service NEVER throws. Instead:
+ * - `saveAnalysisReport()` returns `{ success: boolean, error?: string }`
+ * - Query methods return empty arrays `[]` or `null` on failure
+ * - Constructor sets `enabled: false` if initialization fails
+ *
+ * **Rationale:** Database is optional storage. Analysis should complete
+ * even if persistence fails. Use `isEnabled()` to check availability.
+ *
  * IMPORTANT: Before using this service, you must:
  * 1. Run `pnpm exec convex dev` to initialize Convex and generate API types
  * 2. Set CONVEX_URL in your .env file
@@ -18,19 +29,20 @@ export class DatabaseService {
   private api: any = null;
   private apiLoaded: boolean = false;
   private apiLoadError: string | null = null;
+  private cssService: CSSService = new CSSService();
 
   constructor(convexUrl: string) {
     if (convexUrl && convexUrl.length > 0) {
       try {
         this.client = new ConvexHttpClient(convexUrl);
         this.enabled = true;
-        console.log('📦 Database service initialized (Convex)');
+        logger.info('📦 Database service initialized (Convex)');
       } catch (error) {
-        console.warn('⚠️ Failed to initialize Convex client:', error);
+        logger.warn('Failed to initialize Convex client', { error: error instanceof Error ? error.message : 'Unknown' });
         this.enabled = false;
       }
     } else {
-      console.log('📦 Database service disabled (no CONVEX_URL)');
+      logger.info('📦 Database service disabled (no CONVEX_URL)');
     }
   }
 
@@ -62,7 +74,7 @@ export class DatabaseService {
     } catch {
       this.apiLoaded = true;
       this.apiLoadError = 'Convex API not generated. Run: pnpm exec convex dev';
-      console.warn(`⚠️ ${this.apiLoadError}`);
+      logger.warn(this.apiLoadError);
       return false;
     }
   }
@@ -100,7 +112,7 @@ export class DatabaseService {
         recommendations: report.recommendations,
       });
 
-      console.log(`✅ Saved snapshot: ${snapshotId}`);
+      logger.success(`Saved snapshot`, { snapshotId: snapshotId as string });
 
       // 2. Save stock analyses
       const stockAnalyses = this.buildStockAnalyses(
@@ -115,7 +127,7 @@ export class DatabaseService {
         await this.client.mutation(this.api.snapshots.saveStockAnalyses, {
           analyses: stockAnalyses,
         });
-        console.log(`✅ Saved ${stockAnalyses.length} stock analyses`);
+        logger.success(`Saved stock analyses`, { count: stockAnalyses.length });
       }
 
       return {
@@ -124,7 +136,7 @@ export class DatabaseService {
         stockAnalysesCount: stockAnalyses.length,
       };
     } catch (error) {
-      console.error('❌ Failed to save to database:', error);
+      logger.error('Failed to save to database', { error: error instanceof Error ? error.message : 'Unknown' });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -144,7 +156,7 @@ export class DatabaseService {
     try {
       return await this.client.query(this.api.snapshots.getRecentSnapshots, { limit });
     } catch (error) {
-      console.error('❌ Failed to fetch recent snapshots:', error);
+      logger.error('Failed to fetch recent snapshots', { error: error instanceof Error ? error.message : 'Unknown' });
       return [];
     }
   }
@@ -163,7 +175,7 @@ export class DatabaseService {
         snapshotId,
       });
     } catch (error) {
-      console.error('❌ Failed to fetch snapshot:', error);
+      logger.error('Failed to fetch snapshot', { error: error instanceof Error ? error.message : 'Unknown' });
       return null;
     }
   }
@@ -183,7 +195,7 @@ export class DatabaseService {
         limit,
       });
     } catch (error) {
-      console.error('❌ Failed to fetch stock history:', error);
+      logger.error('Failed to fetch stock history', { error: error instanceof Error ? error.message : 'Unknown' });
       return [];
     }
   }
@@ -203,7 +215,7 @@ export class DatabaseService {
         endDate,
       });
     } catch (error) {
-      console.error('❌ Failed to fetch snapshots by date range:', error);
+      logger.error('Failed to fetch snapshots by date range', { error: error instanceof Error ? error.message : 'Unknown' });
       return [];
     }
   }
@@ -220,7 +232,7 @@ export class DatabaseService {
     try {
       return await this.client.query(this.api.snapshots.getStatistics, {});
     } catch (error) {
-      console.error('❌ Failed to fetch statistics:', error);
+      logger.error('Failed to fetch statistics', { error: error instanceof Error ? error.message : 'Unknown' });
       return null;
     }
   }
@@ -237,7 +249,7 @@ export class DatabaseService {
     try {
       return await this.client.query(this.api.snapshots.getLatestSnapshot, {});
     } catch (error) {
-      console.error('❌ Failed to fetch latest snapshot:', error);
+      logger.error('Failed to fetch latest snapshot', { error: error instanceof Error ? error.message : 'Unknown' });
       return null;
     }
   }
@@ -261,12 +273,12 @@ export class DatabaseService {
     return allocations.map((allocation) => {
       const techData = techDataMap.get(allocation.symbol);
 
-      // Calculate CSS scores (simplified - ideally would come from the analysis)
-      const vixScore = this.calculateVixScore(vix);
-      const rsiScore = techData ? this.calculateRsiScore(techData.rsi) : 50;
-      const bbWidthScore = techData ? this.calculateBbWidthScore(techData.bbWidth) : 50;
-      const ma50Score = techData ? this.calculateMa50Score(techData.ma50Deviation) : 50;
-      const fearGreedScore = fearGreedIndex !== null ? this.calculateFearGreedScore(fearGreedIndex) : undefined;
+      // Calculate CSS scores using shared CSSService logic
+      const vixScore = this.cssService.calculateVIXScore(vix);
+      const rsiScore = techData ? this.cssService.calculateRSIScore(techData.rsi) : 50;
+      const bbWidthScore = techData ? this.cssService.calculateBBWidthScore(techData.bbWidth) : 50;
+      const ma50Score = techData ? this.cssService.calculateMA50Score(techData.ma50Deviation) : 50;
+      const fearGreedScore = fearGreedIndex !== null ? this.cssService.calculateFearGreedScore(fearGreedIndex) : undefined;
 
       return {
         snapshotId,
@@ -306,55 +318,5 @@ export class DatabaseService {
     if (index <= 55) return 'Neutral';
     if (index <= 75) return 'Greed';
     return 'Extreme Greed';
-  }
-
-  // Score calculation helpers (matching CSS service logic)
-  private calculateVixScore(vix: number): number {
-    if (vix <= 12) return 10;
-    if (vix <= 15) return 20;
-    if (vix <= 20) return 40;
-    if (vix <= 25) return 55;
-    if (vix <= 30) return 70;
-    if (vix <= 40) return 85;
-    return 100;
-  }
-
-  private calculateRsiScore(rsi: number): number {
-    if (rsi <= 20) return 100;
-    if (rsi <= 30) return 85;
-    if (rsi <= 40) return 65;
-    if (rsi <= 50) return 50;
-    if (rsi <= 60) return 40;
-    if (rsi <= 70) return 25;
-    return 10;
-  }
-
-  private calculateBbWidthScore(bbWidth: number): number {
-    if (bbWidth <= 3) return 20;
-    if (bbWidth <= 5) return 35;
-    if (bbWidth <= 8) return 50;
-    if (bbWidth <= 12) return 65;
-    if (bbWidth <= 18) return 80;
-    return 90;
-  }
-
-  private calculateMa50Score(deviation: number): number {
-    if (deviation <= -15) return 100;
-    if (deviation <= -10) return 85;
-    if (deviation <= -5) return 70;
-    if (deviation <= 0) return 55;
-    if (deviation <= 5) return 40;
-    if (deviation <= 10) return 25;
-    return 10;
-  }
-
-  private calculateFearGreedScore(fg: number): number {
-    if (fg <= 10) return 100;
-    if (fg <= 25) return 85;
-    if (fg <= 40) return 65;
-    if (fg <= 55) return 50;
-    if (fg <= 70) return 35;
-    if (fg <= 85) return 20;
-    return 10;
   }
 }

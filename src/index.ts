@@ -1,23 +1,24 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
+import { logger as honoLogger } from 'hono/logger';
 import * as cron from 'node-cron';
-import * as dotenv from 'dotenv';
 import { analyzeRouter } from './routes/analyze';
 import { historyRouter } from './routes/history';
-import { loadConfig, validateConfig } from './utils/config';
+import { getConfig } from './utils/config';
 import { PortfolioAllocationEngine } from './services/portfolioAllocation';
 import { EmailService } from './services/email';
 import { DatabaseService } from './services/database';
+import { logger } from './utils/logger';
 
-// Load environment variables
-dotenv.config();
+// Load and validate config at startup (fail-fast)
+// This will throw if required env vars are missing
+const config = getConfig();
 
 const app = new Hono();
 
 // Middleware
-app.use('*', logger());
+app.use('*', honoLogger());
 app.use('*', cors());
 
 // Health check endpoint
@@ -35,7 +36,6 @@ app.route('/api/history', historyRouter);
 
 // Root endpoint with API info
 app.get('/', (c) => {
-  const config = loadConfig();
   return c.json({
     name: 'SIP Portfolio Advisor API',
     version: '4.3.0',
@@ -80,13 +80,7 @@ async function runScheduledAnalysis(): Promise<void> {
   console.log(`Time: ${new Date().toISOString()}`);
 
   try {
-    const config = loadConfig();
-    
-    if (!validateConfig(config)) {
-      console.error('❌ Configuration validation failed');
-      return;
-    }
-
+    // Config is already validated at startup, just use it
     console.log(`📧 Recipients: ${config.emailTo.join(', ')}`);
     console.log(`💰 Weekly Amount: $${config.weeklyInvestmentAmount}`);
     console.log(`📈 Stocks: ${config.defaultStocks.join(', ')}`);
@@ -139,7 +133,6 @@ async function runScheduledAnalysis(): Promise<void> {
 }
 
 // Start server and cron scheduler
-const config = loadConfig();
 const port = config.port;
 
 console.log('🚀 SIP Portfolio Advisor - CSS Strategy v4.3');
@@ -168,13 +161,17 @@ serve({
     console.log(`⏰ Cron scheduler enabled: ${cronSchedule}`);
     console.log(`   (${describeCronSchedule(cronSchedule)})`);
     
-    cron.schedule(cronSchedule, () => {
-      runScheduledAnalysis();
+    cron.schedule(cronSchedule, async () => {
+      try {
+        await runScheduledAnalysis();
+      } catch (error) {
+        console.error('❌ Cron job failed:', error instanceof Error ? error.message : error);
+      }
     }, {
-      timezone: 'Pacific/Auckland'  // NZST timezone
+      timezone: config.timezone
     });
-    
-    console.log('   Timezone: Pacific/Auckland (NZST)');
+
+    console.log(`   Timezone: ${config.timezone}`);
   } else {
     console.log(`⚠️ Invalid cron schedule: ${cronSchedule}`);
     console.log('   Cron scheduler disabled');
@@ -205,5 +202,18 @@ function describeCronSchedule(schedule: string): string {
   
   return `${dayName} at ${timeStr}`;
 }
+
+/**
+ * Graceful shutdown handler
+ * Ensures logger file stream is properly closed
+ */
+function gracefulShutdown(signal: string): void {
+  console.log(`\n${signal} received. Shutting down gracefully...`);
+  logger.close();
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;

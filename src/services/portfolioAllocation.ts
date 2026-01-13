@@ -70,11 +70,16 @@ export class PortfolioAllocationEngine {
     // Analyze each stock
     const analyses = await this.analyzeStocks(config.defaultStocks, vix, fearGreedIndex);
 
-    // Get indicator source from technical analysis service
-    indicatorSource = this.technicalAnalysisService.getLastDataSource();
-    
-    // Get final market data source (may have changed during stock analysis)
-    marketDataSource = this.marketDataService.getLastDataSource();
+    // Derive data sources from analyses (avoids race conditions from shared state)
+    // Report fallback/simulated if ANY stock used fallback
+    indicatorSource = analyses.some(a => a.technicalIndicators.dataSource === 'custom-fallback')
+      ? 'custom-fallback'
+      : 'technicalindicators';
+    marketDataSource = analyses.some(a => a.marketData.dataSource === 'simulated')
+      ? 'simulated'
+      : analyses.some(a => a.marketData.dataSource === 'axios-fallback')
+        ? 'axios-fallback'
+        : 'yahoo-finance2';
 
     // Calculate allocations using CSS
     const allocations = this.calculateAllocations(
@@ -126,19 +131,20 @@ export class PortfolioAllocationEngine {
     vix: number,
     fearGreedIndex: number | null
   ): Promise<StockAnalysis[]> {
-    const analyses: StockAnalysis[] = [];
-    
-    for (const symbol of symbols) {
-      try {
-        const analysis = await this.analyzeStock(symbol, vix, fearGreedIndex);
-        analyses.push(analysis);
-        console.log(`✓ ${symbol}: CSS=${analysis.cssBreakdown.totalCSS.toFixed(1)} (${analysis.cssBreakdown.multiplier}x) RSI=${analysis.technicalIndicators.rsi.toFixed(1)}`);
-      } catch (error) {
-        console.error(`✗ Failed to analyze ${symbol}:`, error);
-      }
-    }
-    
-    return analyses;
+    const analysisPromises = symbols.map(symbol =>
+      this.analyzeStock(symbol, vix, fearGreedIndex)
+        .then(analysis => {
+          console.log(`✓ ${symbol}: CSS=${analysis.cssBreakdown.totalCSS.toFixed(1)} (${analysis.cssBreakdown.multiplier}x) RSI=${analysis.technicalIndicators.rsi.toFixed(1)}`);
+          return analysis;
+        })
+        .catch(error => {
+          console.error(`✗ Failed to analyze ${symbol}:`, error);
+          return null;
+        })
+    );
+
+    const results = await Promise.all(analysisPromises);
+    return results.filter((a): a is StockAnalysis => a !== null);
   }
 
   /**
@@ -149,8 +155,11 @@ export class PortfolioAllocationEngine {
     vix: number,
     fearGreedIndex: number | null
   ): Promise<StockAnalysis> {
-    const marketData = await this.marketDataService.fetchStockData(symbol);
-    const historicalResult = await this.marketDataService.fetchHistoricalData(symbol);
+    // Fetch market data and historical data in parallel for better performance
+    const [marketData, historicalResult] = await Promise.all([
+      this.marketDataService.fetchStockData(symbol),
+      this.marketDataService.fetchHistoricalData(symbol)
+    ]);
     const technicalIndicators = this.technicalAnalysisService.calculateIndicators(historicalResult.prices);
     
     // Calculate CSS breakdown for this asset
@@ -225,8 +234,8 @@ export class PortfolioAllocationEngine {
     const basePercentage = this.getBaseAllocationPercentage(symbol);
     const baseAmount = (baseBudget * basePercentage) / 100;
 
-    // Apply CSS multiplier
-    const multiplier = cssBreakdown.multiplier;
+    // Apply CSS multiplier (guard against NaN from failed calculations)
+    const multiplier = isNaN(cssBreakdown.multiplier) ? 1.0 : cssBreakdown.multiplier;
     let finalAmount = baseAmount * multiplier;
 
     // Apply min/max constraints proportionally

@@ -4,7 +4,9 @@ import { MarketDataWithSource } from '../types';
 import { HISTORY_DAYS } from '../utils/multiplierThresholds';
 
 // Initialize yahoo-finance2 client
-const yahooFinance = new YahooFinance();
+const yahooFinance = new YahooFinance({
+  suppressNotices: ['yahooSurvey']  // Suppress non-critical survey notices
+});
 
 /**
  * Type definition for yahoo-finance2 quote result
@@ -19,16 +21,25 @@ interface YahooQuoteResult {
 }
 
 /**
- * Type definition for yahoo-finance2 historical result
+ * Type definition for yahoo-finance2 chart result
  */
-interface YahooHistoricalRow {
+interface YahooChartQuote {
   date: Date;
   open: number;
   high: number;
   low: number;
   close: number;
   volume: number;
-  adjClose?: number;
+  adjclose?: number;
+}
+
+interface YahooChartResult {
+  meta: {
+    regularMarketPrice: number;
+    previousClose?: number;
+    chartPreviousClose?: number;
+  };
+  quotes: YahooChartQuote[];
 }
 
 interface YahooChartResponse {
@@ -51,9 +62,22 @@ interface YahooChartResponse {
 
 /**
  * Market Data Service
- * 
+ *
  * Uses yahoo-finance2 library as primary data source with
  * direct axios API calls as fallback for resilience.
+ *
+ * ## Error Handling Strategy: NEVER THROWS
+ *
+ * This service uses a graceful degradation pattern:
+ * 1. Try primary source (yahoo-finance2)
+ * 2. On failure, try fallback source (direct axios API)
+ * 3. On complete failure, return simulated/default data
+ *
+ * **Rationale:** Market data failures should never prevent the
+ * investment analysis from completing. It's better to use slightly
+ * stale or estimated data than to fail entirely.
+ *
+ * All methods track their data source via `getLastDataSource()`.
  */
 export class MarketDataService {
   private static readonly VIX_SYMBOL = '^VIX';
@@ -63,19 +87,23 @@ export class MarketDataService {
   };
 
   // Track which source was used
-  private lastDataSource: 'yahoo-finance2' | 'axios-fallback' = 'yahoo-finance2';
+  private lastDataSource: 'yahoo-finance2' | 'axios-fallback' | 'simulated' = 'yahoo-finance2';
 
   /**
    * Get the last used data source
    */
-  getLastDataSource(): 'yahoo-finance2' | 'axios-fallback' {
+  getLastDataSource(): 'yahoo-finance2' | 'axios-fallback' | 'simulated' {
     return this.lastDataSource;
   }
 
   /**
-   * Fetches real-time market data for a given stock symbol
-   * Primary: yahoo-finance2 library
-   * Fallback: Direct axios API call
+   * Fetches real-time market data for a given stock symbol.
+   *
+   * @param symbol - Stock ticker symbol (e.g., "AAPL", "QQQ")
+   * @returns Market data with source indicator - NEVER throws
+   *
+   * @remarks
+   * Fallback chain: yahoo-finance2 → axios API → simulated data
    */
   async fetchStockData(symbol: string): Promise<MarketDataWithSource> {
     // Try yahoo-finance2 first
@@ -150,40 +178,46 @@ export class MarketDataService {
   }
 
   /**
-   * Fetches historical price data for technical analysis
-   * Primary: yahoo-finance2 library
-   * Fallback: Direct axios API call
-   * Default 100 days for MA50 calculation (CSS v4.2)
+   * Fetches historical price data for technical analysis.
+   *
+   * @param symbol - Stock ticker symbol
+   * @param days - Number of days of history (default: 150 for MA50 slope)
+   * @returns Array of closing prices with source indicator - NEVER throws
+   *
+   * @remarks
+   * Fallback chain: yahoo-finance2 chart() → axios API → simulated data
    */
-  async fetchHistoricalData(symbol: string, days: number = HISTORY_DAYS): Promise<{ prices: number[]; source: 'yahoo-finance2' | 'axios-fallback' }> {
-    // Try yahoo-finance2 first
+  async fetchHistoricalData(symbol: string, days: number = HISTORY_DAYS): Promise<{ prices: number[]; source: 'yahoo-finance2' | 'axios-fallback' | 'simulated' }> {
+    // Try yahoo-finance2 chart() method (replaces deprecated historical())
     try {
       const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
-      const result = await yahooFinance.historical(symbol, {
+      const result = await yahooFinance.chart(symbol, {
         period1: startDate,
         period2: endDate,
         interval: '1d'
-      }) as YahooHistoricalRow[];
+      }) as YahooChartResult;
 
-      if (!result || result.length === 0) {
-        throw new Error('No historical data returned from yahoo-finance2');
+      if (!result || !result.quotes || result.quotes.length === 0) {
+        throw new Error('No chart data returned from yahoo-finance2');
       }
 
-      const prices = result.map((row: YahooHistoricalRow) => row.close).filter((p): p is number => p !== null && p !== undefined);
-      
+      const prices = result.quotes
+        .map((quote: YahooChartQuote) => quote.close)
+        .filter((p): p is number => p !== null && p !== undefined);
+
       if (prices.length < 10) {
         throw new Error(`Insufficient historical data: only ${prices.length} points`);
       }
 
       this.lastDataSource = 'yahoo-finance2';
-      console.log(`✅ ${symbol}: Historical data via yahoo-finance2 (${prices.length} days)`);
+      console.log(`✅ ${symbol}: Historical data via yahoo-finance2 chart() (${prices.length} days)`);
 
       return { prices, source: 'yahoo-finance2' };
     } catch (libraryError) {
-      console.warn(`⚠️ yahoo-finance2 historical failed for ${symbol}:`, libraryError instanceof Error ? libraryError.message : libraryError);
+      console.warn(`⚠️ yahoo-finance2 chart() failed for ${symbol}:`, libraryError instanceof Error ? libraryError.message : libraryError);
       console.log(`   Falling back to axios API...`);
 
       // Fallback to direct axios call
@@ -194,7 +228,7 @@ export class MarketDataService {
   /**
    * Fallback: Direct axios API call for historical data
    */
-  private async fetchHistoricalDataAxios(symbol: string, days: number): Promise<{ prices: number[]; source: 'yahoo-finance2' | 'axios-fallback' }> {
+  private async fetchHistoricalDataAxios(symbol: string, days: number): Promise<{ prices: number[]; source: 'yahoo-finance2' | 'axios-fallback' | 'simulated' }> {
     try {
       const data = await this.fetchFromYahooAxios<YahooChartResponse>(symbol, {
         interval: '1d',
@@ -215,14 +249,20 @@ export class MarketDataService {
       return { prices, source: 'axios-fallback' };
     } catch (error) {
       console.error(`❌ Both sources failed for ${symbol} historical:`, error);
-      return { prices: this.getSimulatedHistoricalData(days), source: 'axios-fallback' };
+      console.warn(`🚨 ${symbol}: Using SIMULATED historical data - DO NOT USE FOR REAL INVESTMENTS`);
+      this.lastDataSource = 'simulated';
+      return { prices: this.getSimulatedHistoricalData(days), source: 'simulated' };
     }
   }
 
   /**
-   * Fetches VIX (Volatility Index) data
-   * Primary: yahoo-finance2 library
-   * Fallback: Direct axios API call
+   * Fetches VIX (Volatility Index) data.
+   *
+   * @returns VIX value with source indicator - NEVER throws
+   *
+   * @remarks
+   * Fallback chain: yahoo-finance2 → axios API → default value (18.5)
+   * Default 18.5 represents moderate/neutral volatility.
    */
   async fetchVIX(): Promise<{ vix: number; source: 'yahoo-finance2' | 'axios-fallback' }> {
     // Try yahoo-finance2 first
@@ -272,7 +312,8 @@ export class MarketDataService {
   ): Promise<T> {
     const config: AxiosRequestConfig = {
       params,
-      headers: MarketDataService.DEFAULT_HEADERS
+      headers: MarketDataService.DEFAULT_HEADERS,
+      timeout: 15000  // 15 second timeout
     };
 
     const response = await axios.get<T>(
@@ -292,6 +333,7 @@ export class MarketDataService {
 
   /**
    * Simulated data for development/testing when API is unavailable
+   * WARNING: This returns FAKE data - clearly flagged as 'simulated'
    */
   private getSimulatedData(symbol: string): MarketDataWithSource {
     // Use consistent pseudo-random values based on symbol
@@ -300,7 +342,8 @@ export class MarketDataService {
     const previousClose = basePrice * (0.98 + (seed % 4) / 100);
     const currentPrice = basePrice;
 
-    console.warn(`⚠️ ${symbol}: Using simulated data (all sources failed)`);
+    this.lastDataSource = 'simulated';
+    console.warn(`🚨 ${symbol}: Using SIMULATED data (all API sources failed) - DO NOT USE FOR REAL INVESTMENTS`);
 
     return {
       symbol,
@@ -310,7 +353,7 @@ export class MarketDataService {
       changePercent: ((currentPrice - previousClose) / previousClose) * 100,
       volume: Math.floor(1000000 + (seed % 9000000)),
       timestamp: new Date(),
-      dataSource: 'axios-fallback'
+      dataSource: 'simulated'
     };
   }
 

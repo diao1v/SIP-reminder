@@ -1,28 +1,13 @@
 import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
 import { PortfolioAllocationEngine } from '../services/portfolioAllocation';
 import { EmailService } from '../services/email';
-import { DatabaseService } from '../services/database';
-import { loadConfig } from '../utils/config';
+import { getDbService } from '../services/db.singleton';
+import { getConfig } from '../utils/config';
+import { analyzeBodySchema, formatZodError } from '../utils/validation';
 import { AllocationReport, Config, DatabaseSaveResult } from '../types';
 
 const analyzeRouter = new Hono();
-
-// Database service singleton
-let dbService: DatabaseService | null = null;
-
-function getDbService(convexUrl: string): DatabaseService {
-  if (!dbService) {
-    dbService = new DatabaseService(convexUrl);
-  }
-  return dbService;
-}
-
-interface AnalyzeRequestBody {
-  investmentAmount?: number;
-  stocks?: string[];
-  sendEmail?: boolean;
-  saveToDatabase?: boolean;
-}
 
 /**
  * GET /api/analyze
@@ -30,7 +15,7 @@ interface AnalyzeRequestBody {
  */
 analyzeRouter.get('/', async (c) => {
   try {
-    const config = loadConfig();
+    const config = getConfig();
     const engine = new PortfolioAllocationEngine();
     const report = await engine.generateAllocation(config);
 
@@ -54,10 +39,21 @@ analyzeRouter.get('/', async (c) => {
  * Manual trigger for one-off investment analysis
  * Accepts optional parameters to override config
  */
-analyzeRouter.post('/', async (c) => {
+analyzeRouter.post(
+  '/',
+  zValidator('json', analyzeBodySchema, (result, c) => {
+    if (!result.success) {
+      return c.json({
+        success: false,
+        error: 'Validation failed',
+        details: formatZodError(result.error),
+      }, 400);
+    }
+  }),
+  async (c) => {
   try {
-    const body = await c.req.json<AnalyzeRequestBody>().catch((): AnalyzeRequestBody => ({}));
-    const baseConfig = loadConfig();
+    const body = c.req.valid('json');
+    const baseConfig = getConfig();
 
     // Create config with overrides from request body
     const config: Config = {

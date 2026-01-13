@@ -178,6 +178,8 @@ export interface DatabaseSaveResult {
   snapshotId?: string;
   stockAnalysesCount?: number;
   error?: string;
+  replaced?: boolean;          // True if an existing record was replaced
+  replacedSnapshotId?: string; // ID of the replaced record
 }
 
 /**

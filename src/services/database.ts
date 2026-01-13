@@ -93,9 +93,31 @@ export class DatabaseService {
       return { success: false, error: this.apiLoadError || 'Convex API not available' };
     }
 
+    // Extract date in YYYY-MM-DD format for deduplication
+    const date = report.date.toISOString().split('T')[0];
+    let replacedSnapshotId: string | undefined;
+
     try {
+      // Check if snapshot already exists for this date
+      const existingSnapshot = await this.client.query(
+        this.api.snapshots.getSnapshotByDate,
+        { date }
+      );
+
+      if (existingSnapshot) {
+        // Delete existing snapshot and its stock analyses to replace with fresh data
+        logger.info(`Replacing existing snapshot for ${date}`, {
+          existingSnapshotId: existingSnapshot._id
+        });
+        await this.client.mutation(this.api.snapshots.deleteSnapshot, {
+          snapshotId: existingSnapshot._id,
+        });
+        replacedSnapshotId = existingSnapshot._id;
+      }
+
       // 1. Save the main snapshot
       const snapshotId = await this.client.mutation(this.api.snapshots.saveWeeklySnapshot, {
+        date,
         timestamp: report.date.toISOString(),
         vix: report.vix,
         fearGreedIndex: report.fearGreedIndex ?? undefined,
@@ -134,6 +156,8 @@ export class DatabaseService {
         success: true,
         snapshotId: snapshotId as string,
         stockAnalysesCount: stockAnalyses.length,
+        replaced: !!replacedSnapshotId,
+        replacedSnapshotId,
       };
     } catch (error) {
       logger.error('Failed to save to database', { error: error instanceof Error ? error.message : 'Unknown' });

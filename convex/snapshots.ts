@@ -11,6 +11,7 @@ import { v } from "convex/values";
  */
 export const saveWeeklySnapshot = mutation({
   args: {
+    date: v.string(),      // "YYYY-MM-DD" - for deduplication
     timestamp: v.string(),
     vix: v.number(),
     fearGreedIndex: v.optional(v.number()),
@@ -29,6 +30,32 @@ export const saveWeeklySnapshot = mutation({
   handler: async (ctx, args) => {
     const snapshotId = await ctx.db.insert("weeklySnapshots", args);
     return snapshotId;
+  },
+});
+
+/**
+ * Delete a snapshot and all its associated stock analyses
+ * Used when replacing an existing snapshot for the same date
+ */
+export const deleteSnapshot = mutation({
+  args: {
+    snapshotId: v.id("weeklySnapshots"),
+  },
+  handler: async (ctx, args) => {
+    // First, delete all associated stock analyses
+    const stockAnalyses = await ctx.db
+      .query("stockAnalyses")
+      .withIndex("by_snapshot", (q) => q.eq("snapshotId", args.snapshotId))
+      .collect();
+
+    for (const analysis of stockAnalyses) {
+      await ctx.db.delete(analysis._id);
+    }
+
+    // Then delete the snapshot itself
+    await ctx.db.delete(args.snapshotId);
+
+    return { deletedStockAnalyses: stockAnalyses.length };
   },
 });
 
@@ -211,6 +238,23 @@ export const getStatistics = query({
       averageCSS: Math.round(averageCSS * 100) / 100,
       marketConditionDistribution,
     };
+  },
+});
+
+/**
+ * Get snapshot by date (for deduplication check)
+ * Returns the snapshot if one exists for the given date, null otherwise
+ */
+export const getSnapshotByDate = query({
+  args: {
+    date: v.string(), // "YYYY-MM-DD"
+  },
+  handler: async (ctx, args) => {
+    const snapshot = await ctx.db
+      .query("weeklySnapshots")
+      .withIndex("by_date", (q) => q.eq("date", args.date))
+      .first();
+    return snapshot;
   },
 });
 

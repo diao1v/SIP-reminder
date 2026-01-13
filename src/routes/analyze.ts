@@ -107,6 +107,7 @@ analyzeRouter.post(
       report: formatReportForResponse(report),
       emailSent,
       savedToDatabase: dbResult.success,
+      replacedExisting: dbResult.replaced ?? false,
       snapshotId: dbResult.snapshotId,
       databaseError: dbResult.success ? undefined : dbResult.error
     });

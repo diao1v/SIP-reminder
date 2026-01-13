@@ -101,7 +101,11 @@ async function runScheduledAnalysis(): Promise<void> {
         const dbResult = await dbService.saveAnalysisReport(report);
         
         if (dbResult.success) {
-          console.log(`✅ Saved to database (ID: ${dbResult.snapshotId})`);
+          if (dbResult.replaced) {
+            console.log(`🔄 Replaced existing snapshot (old: ${dbResult.replacedSnapshotId}, new: ${dbResult.snapshotId})`);
+          } else {
+            console.log(`✅ Saved to database (ID: ${dbResult.snapshotId})`);
+          }
         } else {
           console.warn(`⚠️ Database save failed: ${dbResult.error}`);
         }

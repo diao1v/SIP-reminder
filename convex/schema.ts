@@ -14,9 +14,10 @@ export default defineSchema({
    * Stores market conditions, CSS scores, and investment decisions
    */
   weeklySnapshots: defineTable({
-    // Timestamp
-    timestamp: v.string(), // ISO string
-    
+    // Date & Timestamp
+    date: v.string(),      // "YYYY-MM-DD" - one record per day
+    timestamp: v.string(), // Full ISO string
+
     // Market Conditions
     vix: v.number(),
     fearGreedIndex: v.optional(v.number()),
@@ -42,6 +43,7 @@ export default defineSchema({
     // Recommendations (stored as JSON string)
     recommendations: v.array(v.string()),
   })
+    .index("by_date", ["date"])
     .index("by_timestamp", ["timestamp"])
     .index("by_marketCondition", ["marketCondition"]),
 
